@@ -1,53 +1,76 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import TrackRow from '../components/tracks/TrackRow';
 import TrackCardSmall from '../components/tracks/TrackCardSmall';
 import AudioPlayer from '../components/player/AudioPlayer';
-import { mockUser, mockTracks, mockFavorites } from '@/mocks/homeData';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { tracksAPI } from '@/api/tracks';
+import { favoritesAPI } from '@/api/favorites';
 
 export default function Home() {
   const { isDark } = useTheme();
+  const { user } = useAuth();
   const [currentTrack, setCurrentTrack] = useState(null);
-  const [user, setUser] = useState(null);
   const [tracks, setTracks] = useState([]);
   const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Загрузка моковых данных
-  useEffect(() => {
-    setTimeout(() => {
-      setUser(mockUser);
-      // Только одобренные треки, сортировка по дате (новые сверху)
-      const approvedTracks = mockTracks
-        .filter(t => t.status === 'approved')
-        .sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      // Получаем одобренные треки и гарантируем, что это массив
+      const approvedTracks = await tracksAPI.getApprovedTracks() || [];
       setTracks(approvedTracks);
-      setFavorites(mockFavorites.filter(f => f.user_email === mockUser.email));
+
+      if (user) {
+        const favs = await favoritesAPI.getUserFavorites(user.id) || [];
+        setFavorites(favs);
+      } else {
+        setFavorites([]);
+      }
+    } catch (error) {
+      console.error('Failed to load home data:', error);
+    } finally {
       setLoading(false);
-    }, 500);
-  }, []);
+    }
+  }, [user]);
 
-  const newTracks = tracks.slice(0, 5);
-  const recommendedTracks = tracks.slice(0, 4);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
-  const playTrack = (track) => {
+  // Безопасные срезы, даже если tracks вдруг станет null
+  const newTracks = tracks?.slice(0, 5) || [];
+  const recommendedTracks = tracks?.slice(0, 4) || [];
+
+  const playTrack = async (track) => {
     setCurrentTrack(track);
-    // Увеличиваем счётчик прослушиваний локально
-    setTracks(prev =>
-      prev.map(t => (t.id === track.id ? { ...t, plays_count: (t.plays_count || 0) + 1 } : t))
-    );
+    try {
+      await tracksAPI.playTrack(track.id);
+      setTracks(prev =>
+        prev.map(t => (t.id === track.id ? { ...t, plays_count: (t.plays_count || 0) + 1 } : t))
+      );
+    } catch (error) {
+      console.error('Failed to update play count:', error);
+    }
   };
 
-  const toggleFavorite = (track) => {
+  const toggleFavorite = async (track) => {
     if (!user) return;
     const isFav = favorites.some(f => f.track_id === track.id);
-    if (isFav) {
-      setFavorites(prev => prev.filter(f => f.track_id !== track.id));
-    } else {
-      setFavorites(prev => [...prev, { track_id: track.id, user_email: user.email }]);
+    try {
+      if (isFav) {
+        await favoritesAPI.removeFavorite(user.id, track.id);
+        setFavorites(prev => prev.filter(f => f.track_id !== track.id));
+      } else {
+        const newFav = await favoritesAPI.addFavorite(user.id, track.id);
+        setFavorites(prev => [...prev, newFav]);
+      }
+    } catch (error) {
+      console.error('Failed to toggle favorite:', error);
     }
   };
 
@@ -58,7 +81,6 @@ export default function Home() {
 
   return (
     <div className="relative min-h-screen">
-      {/* Весь контент */}
       <div className="relative z-10 p-8 pb-32">
         {/* Header */}
         <motion.div

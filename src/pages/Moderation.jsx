@@ -1,35 +1,61 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Shield, Inbox } from 'lucide-react';
 import ModerationCard from '../components/moderation/ModerationCard';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { mockAdminUser, mockPendingTracks } from '@/mocks/moderationData';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { tracksAPI } from '@/api/tracks';
 
 export default function Moderation() {
-   const { isDark } = useTheme();
-  const [user, setUser] = useState(null);
+  const { isDark } = useTheme();
+  const { user } = useAuth();
   const [pendingTracks, setPendingTracks] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    setTimeout(() => {
-      setUser(mockAdminUser);
-      setPendingTracks(mockPendingTracks);
+  const fetchPendingTracks = useCallback(async () => {
+    if (!user || user.role !== 'admin') {
       setLoading(false);
-    }, 500);
-  }, []);
+      return;
+    }
+    try {
+      setLoading(true);
+      const tracks = await tracksAPI.getPendingTracks();
+      setPendingTracks(tracks);
+    } catch (error) {
+      console.error('Failed to load pending tracks:', error);
+      toast.error('Не удалось загрузить треки на модерацию');
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
-  const handleApprove = (trackId) => {
-    setPendingTracks(prev => prev.filter(track => track.id !== trackId));
-    toast.success('Трек одобрен и опубликован!');
+  useEffect(() => {
+    fetchPendingTracks();
+  }, [fetchPendingTracks]);
+
+  const handleApprove = async (trackId) => {
+    try {
+      await tracksAPI.approveTrack(trackId);
+      setPendingTracks(prev => prev.filter(track => track.id !== trackId));
+      toast.success('Трек одобрен и опубликован!');
+    } catch (error) {
+      console.error('Approve failed:', error);
+      toast.error('Ошибка при одобрении трека');
+    }
   };
 
-  const handleReject = (trackId, reason) => {
-    setPendingTracks(prev => prev.filter(track => track.id !== trackId));
-    toast.success('Трек отклонён');
+  const handleReject = async (trackId, reason) => {
+    try {
+      await tracksAPI.rejectTrack(trackId, reason);
+      setPendingTracks(prev => prev.filter(track => track.id !== trackId));
+      toast.success('Трек отклонён');
+    } catch (error) {
+      console.error('Reject failed:', error);
+      toast.error('Ошибка при отклонении трека');
+    }
   };
 
   const textClass = isDark ? 'text-white' : 'text-gray-900';
@@ -44,7 +70,8 @@ export default function Moderation() {
         <Card className={cn('max-w-md', cardBg)}>
           <CardContent className="p-8 text-center">
             <Shield className="w-16 h-16 mx-auto text-zinc-500 mb-4" />
-            <h2 className={cn('text-xl font-semibold mb-2', textClass)}>Загрузка...</h2>
+            <h2 className={cn('text-xl font-semibold mb-2', textClass)}>Необходима авторизация</h2>
+            <p className={textSecondary}>Войдите как администратор</p>
           </CardContent>
         </Card>
       </div>

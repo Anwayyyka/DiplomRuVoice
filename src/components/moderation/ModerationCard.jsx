@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Play, Pause, Check, X, User, Calendar, Music } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 const genreLabels = {
   'pop': 'Поп',
@@ -21,11 +22,22 @@ const genreLabels = {
   'other': 'Другое'
 };
 
-export default function ModerationCard({ track, onApprove, onReject }) {
+export default function ModerationCard({ track, onApprove, onReject, isDark = true }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const audioRef = useRef(null);
+
+  // Классы для текста в зависимости от темы
+  const textClass = isDark ? 'text-white' : 'text-gray-900';
+  const textSecondary = isDark ? 'text-gray-400' : 'text-gray-600';
+  const textMuted = isDark ? 'text-zinc-500' : 'text-gray-500';
+  const bgCard = isDark ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white/50 border-gray-200';
+  const bgBadge = isDark ? 'bg-zinc-800 text-zinc-300' : 'bg-gray-200 text-gray-700';
+  const bgTextarea = isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900';
+  const buttonRejectOutline = isDark
+    ? 'border-red-600 text-red-500 hover:bg-red-600 hover:text-white'
+    : 'border-red-400 text-red-600 hover:bg-red-500 hover:text-white';
 
   const togglePlay = () => {
     if (audioRef.current) {
@@ -47,7 +59,7 @@ export default function ModerationCard({ track, onApprove, onReject }) {
   };
 
   return (
-    <Card className="bg-zinc-900/50 border-zinc-800 overflow-hidden">
+    <Card className={cn('overflow-hidden', bgCard)}>
       <audio ref={audioRef} src={track.audio_url} onEnded={() => setIsPlaying(false)} />
       
       <CardContent className="p-0">
@@ -71,11 +83,11 @@ export default function ModerationCard({ track, onApprove, onReject }) {
           <div className="flex-1 p-4">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h3 className="text-lg font-semibold text-white">{track.title}</h3>
-                <p className="text-zinc-400">{track.artist_name}</p>
+                <h3 className={cn('text-lg font-semibold', textClass)}>{track.title}</h3>
+                <p className={textSecondary}>{track.artist_name}</p>
               </div>
               {track.genre && (
-                <Badge variant="secondary" className="bg-zinc-800 text-zinc-300">
+                <Badge variant="secondary" className={bgBadge}>
                   <Music className="w-3 h-3 mr-1" />
                   {genreLabels[track.genre] || track.genre}
                 </Badge>
@@ -83,10 +95,10 @@ export default function ModerationCard({ track, onApprove, onReject }) {
             </div>
 
             {track.description && (
-              <p className="text-sm text-zinc-400 mb-3 line-clamp-2">{track.description}</p>
+              <p className={cn('text-sm mb-3 line-clamp-2', textSecondary)}>{track.description}</p>
             )}
 
-            <div className="flex items-center gap-4 text-xs text-zinc-500 mb-4">
+            <div className={cn('flex items-center gap-4 text-xs mb-4', textMuted)}>
               <span className="flex items-center gap-1">
                 <User className="w-3 h-3" />
                 {track.created_by}
@@ -109,7 +121,7 @@ export default function ModerationCard({ track, onApprove, onReject }) {
                 <Button
                   variant="outline"
                   onClick={() => setShowRejectForm(true)}
-                  className="border-red-600 text-red-500 hover:bg-red-600 hover:text-white"
+                  className={buttonRejectOutline}
                 >
                   <X className="w-4 h-4 mr-2" />
                   Отклонить
@@ -121,7 +133,7 @@ export default function ModerationCard({ track, onApprove, onReject }) {
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
                   placeholder="Причина отклонения..."
-                  className="bg-zinc-800 border-zinc-700 text-white"
+                  className={bgTextarea}
                 />
                 <div className="flex gap-2">
                   <Button
@@ -134,7 +146,7 @@ export default function ModerationCard({ track, onApprove, onReject }) {
                   <Button
                     variant="ghost"
                     onClick={() => { setShowRejectForm(false); setRejectReason(''); }}
-                    className="text-zinc-400"
+                    className={isDark ? 'text-zinc-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}
                   >
                     Отмена
                   </Button>

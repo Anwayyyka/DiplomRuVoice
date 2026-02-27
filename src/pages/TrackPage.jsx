@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -9,71 +9,95 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import AudioPlayer from '../components/player/AudioPlayer';
-import { mockTrack, mockComments, mockLikes, mockUser } from '@/mocks/trackPageData';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { tracksAPI } from '@/api/tracks';
+import { commentsAPI } from '@/api/comments';
+import { likesAPI } from '@/api/likes';
+import { toast } from 'sonner';
 
 export default function TrackPage() {
-     const { isDark } = useTheme();
+  const { isDark } = useTheme();
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
-  const trackId = searchParams.get('id') || '1';
-  const [currentTrack, setCurrentTrack] = useState(null);
-  const [newComment, setNewComment] = useState('');
+  const trackId = searchParams.get('id');
+
   const [track, setTrack] = useState(null);
   const [comments, setComments] = useState([]);
   const [likes, setLikes] = useState([]);
-  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [currentTrack, setCurrentTrack] = useState(null);
+  const [newComment, setNewComment] = useState('');
 
-  useEffect(() => {
-    setTimeout(() => {
-      setTrack(mockTrack);
-      setComments(mockComments);
-      setLikes(mockLikes);
-      setUser(mockUser);
+  const fetchData = useCallback(async () => {
+    if (!trackId) return;
+    setLoading(true);
+    try {
+      const [trackData, commentsData, likesData] = await Promise.all([
+        tracksAPI.getTrackById(trackId),
+        commentsAPI.getTrackComments(trackId),
+        likesAPI.getTrackLikes(trackId),
+      ]);
+      setTrack(trackData);
+      setComments(commentsData);
+      setLikes(likesData);
+    } catch (error) {
+      console.error('Failed to load track data:', error);
+      toast.error('Не удалось загрузить информацию о треке');
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   }, [trackId]);
 
-  const isLiked = likes.some(l => l.user_email === user?.email);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
-  const handlePlay = () => {
+  const isLiked = likes.some(like => like.user_id === user?.id);
+
+  const handlePlay = async () => {
     setCurrentTrack(track);
-    setTrack(prev => prev ? { ...prev, plays_count: (prev.plays_count || 0) + 1 } : prev);
-  };
-
-  const toggleLike = () => {
-    if (!user || !track) return;
-    if (isLiked) {
-      setLikes(prev => prev.filter(l => l.user_email !== user.email));
-      setTrack(prev => prev ? { ...prev, likes_count: Math.max(0, (prev.likes_count || 0) - 1) } : prev);
-    } else {
-      const newLike = {
-        id: `like-${Date.now()}`,
-        track_id: track.id,
-        user_email: user.email,
-        created_date: new Date().toISOString(),
-      };
-      setLikes(prev => [...prev, newLike]);
-      setTrack(prev => prev ? { ...prev, likes_count: (prev.likes_count || 0) + 1 } : prev);
+    try {
+      await tracksAPI.playTrack(track.id);
+      setTrack(prev => prev ? { ...prev, plays_count: (prev.plays_count || 0) + 1 } : prev);
+    } catch (error) {
+      console.error('Failed to update play count:', error);
     }
   };
 
-  const addComment = () => {
+  const toggleLike = async () => {
+    if (!user || !track) return;
+    try {
+      if (isLiked) {
+        await likesAPI.unlikeTrack(user.id, track.id);
+        setLikes(prev => prev.filter(like => like.user_id !== user.id));
+        setTrack(prev => prev ? { ...prev, likes_count: Math.max(0, (prev.likes_count || 0) - 1) } : prev);
+      } else {
+        const newLike = await likesAPI.likeTrack(user.id, track.id);
+        setLikes(prev => [...prev, newLike]);
+        setTrack(prev => prev ? { ...prev, likes_count: (prev.likes_count || 0) + 1 } : prev);
+      }
+    } catch (error) {
+      console.error('Failed to toggle like:', error);
+      toast.error('Ошибка при изменении лайка');
+    }
+  };
+
+  const addComment = async () => {
     if (!user || !newComment.trim() || !track) return;
-    const comment = {
-      id: `comment-${Date.now()}`,
-      track_id: track.id,
-      user_email: user.email,
-      user_name: user.full_name || 'Пользователь',
-      text: newComment,
-      created_date: new Date().toISOString(),
-    };
-    setComments(prev => [comment, ...prev]);
-    setNewComment('');
+    try {
+      const comment = await commentsAPI.addComment(user.id, track.id, newComment);
+      setComments(prev => [comment, ...prev]);
+      setNewComment('');
+      toast.success('Комментарий добавлен');
+    } catch (error) {
+      console.error('Failed to add comment:', error);
+      toast.error('Ошибка при добавлении комментария');
+    }
   };
 
   const textClass = isDark ? 'text-white' : 'text-gray-900';
-  const textSecondary = isDark ? 'text-zinc-400' : 'text-gray-500';
+  const textSecondary = isDark ? 'text-gray-400' : 'text-gray-600';
   const cardBg = isDark ? 'bg-zinc-800/50 backdrop-blur-sm' : 'bg-white/80 backdrop-blur-sm';
 
   if (loading || !track) {
@@ -87,7 +111,7 @@ export default function TrackPage() {
   return (
     <div className="relative min-h-screen p-8 pb-32">
       <motion.div
-        className={cn('rounded-2xl p-6 mb-8', cardBg)}
+        className={cn('rounded-2xl p-6 mb-8 border', cardBg)}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
       >
@@ -116,7 +140,7 @@ export default function TrackPage() {
           <div className="flex-1">
             <h1 className={cn('text-3xl font-bold mb-2', textClass)}>{track.title}</h1>
             <Link
-              to={`/artist?email=${encodeURIComponent(track.created_by)}`}
+              to={`/artist?email=${encodeURIComponent(track.artist_id)}`}
               className={cn('text-lg hover:underline', textSecondary)}
             >
               {track.artist_name}
@@ -131,7 +155,7 @@ export default function TrackPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Heart
-                  className={cn('w-5 h-5', isLiked ? 'fill-red-500 text-red-500' : 'text-zinc-400')}
+                  className={cn('w-5 h-5', isLiked ? 'fill-red-500 text-red-500' : textSecondary)}
                 />
                 <span className={textClass}>{likes.length} лайков</span>
               </div>
@@ -162,7 +186,7 @@ export default function TrackPage() {
       </motion.div>
 
       <motion.div
-        className={cn('rounded-2xl p-6', cardBg)}
+        className={cn('rounded-2xl p-6 border', cardBg)}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
@@ -213,7 +237,7 @@ export default function TrackPage() {
                 <div className="flex items-center gap-2 mb-1">
                   <span className={cn('font-medium', textClass)}>{comment.user_name}</span>
                   <span className={cn('text-xs', textSecondary)}>
-                    {format(new Date(comment.created_date), 'd MMM yyyy', { locale: ru })}
+                    {format(new Date(comment.created_at), 'd MMM yyyy', { locale: ru })}
                   </span>
                 </div>
                 <p className={textSecondary}>{comment.text}</p>

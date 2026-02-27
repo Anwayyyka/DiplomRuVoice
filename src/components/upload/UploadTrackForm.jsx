@@ -13,7 +13,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Upload, Music, Image, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { uploadFile, createTrack } from '@/api/tracks'; // импорт API-функций
+import { cn } from '@/lib/utils';
+import { tracksAPI } from '@/api/tracks';
 
 const genres = [
   { value: 'pop', label: 'Поп' },
@@ -32,7 +33,7 @@ const genres = [
 const MAX_AUDIO_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_IMAGE_SIZE = 2 * 1024 * 1024;  // 2 MB
 
-export default function UploadTrackForm({ onSuccess }) {
+export default function UploadTrackForm({ onSuccess, isDark = true }) {
   const [formData, setFormData] = useState({
     title: '',
     artist_name: '',
@@ -43,6 +44,27 @@ export default function UploadTrackForm({ onSuccess }) {
   const [coverFile, setCoverFile] = useState(null);
   const [coverPreview, setCoverPreview] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+
+  // Классы для стилизации в зависимости от темы
+  const cardBg = isDark
+    ? 'bg-zinc-900/50 border-zinc-800'
+    : 'bg-white/80 border-gray-200';
+  const cardTitleClass = isDark ? 'text-white' : 'text-gray-900';
+  const labelClass = isDark ? 'text-zinc-300' : 'text-gray-700';
+  const textMuted = isDark ? 'text-zinc-400' : 'text-gray-500';
+  const textSuccess = isDark ? 'text-green-500' : 'text-green-600';
+  const borderDashed = isDark
+    ? 'border-zinc-700 hover:border-zinc-500'
+    : 'border-gray-300 hover:border-gray-400';
+  const inputClass = isDark
+    ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500'
+    : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400';
+  const selectTriggerClass = isDark
+    ? 'bg-zinc-800 border-zinc-700 text-white'
+    : 'bg-white border-gray-300 text-gray-900';
+  const textareaClass = isDark
+    ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500 min-h-24'
+    : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 min-h-24';
 
   const validateFile = (file, maxSize, allowedTypes, fileType) => {
     if (!file) return false;
@@ -89,26 +111,24 @@ export default function UploadTrackForm({ onSuccess }) {
     setIsUploading(true);
 
     try {
-      // Загружаем аудио
-      const audioResult = await uploadFile(audioFile, 'audio');
-
-      // Загружаем обложку, если есть
-      let coverUrl = null;
+      // Создаём FormData для отправки
+      const formDataToSend = new FormData();
+      formDataToSend.append('title', formData.title);
+      formDataToSend.append('artist_name', formData.artist_name);
+      formDataToSend.append('description', formData.description);
+      if (formData.genre) {
+        formDataToSend.append('genre_id', formData.genre);
+      }
+      formDataToSend.append('audio', audioFile);
       if (coverFile) {
-        const coverResult = await uploadFile(coverFile, 'image');
-        coverUrl = coverResult.url;
+        formDataToSend.append('cover', coverFile);
       }
 
-      // Создаём трек
-      await createTrack({
-        ...formData,
-        audio_url: audioResult.url,
-        cover_url: coverUrl,
-        status: 'pending',
-      });
+      // Отправляем одним запросом
+      const result = await tracksAPI.uploadTrack(formDataToSend);
 
       toast.success('Трек отправлен на модерацию!');
-      onSuccess?.();
+      onSuccess?.(result);
 
       // Сброс формы
       setFormData({ title: '', artist_name: '', genre: '', description: '' });
@@ -124,9 +144,9 @@ export default function UploadTrackForm({ onSuccess }) {
   };
 
   return (
-    <Card className="bg-zinc-900/50 border-zinc-800">
+    <Card className={cn('border', cardBg)}>
       <CardHeader>
-        <CardTitle className="text-white flex items-center gap-2">
+        <CardTitle className={cn('flex items-center gap-2', cardTitleClass)}>
           <Upload className="w-5 h-5" />
           Загрузить трек
         </CardTitle>
@@ -135,9 +155,12 @@ export default function UploadTrackForm({ onSuccess }) {
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Audio Upload */}
           <div className="space-y-2">
-            <Label className="text-zinc-300">Аудиофайл *</Label>
+            <Label className={labelClass}>Аудиофайл *</Label>
             <div
-              className="border-2 border-dashed border-zinc-700 rounded-lg p-8 text-center hover:border-zinc-500 transition-colors cursor-pointer"
+              className={cn(
+                'border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer',
+                borderDashed
+              )}
               onClick={() => document.getElementById('audio-upload').click()}
             >
               <input
@@ -147,20 +170,23 @@ export default function UploadTrackForm({ onSuccess }) {
                 onChange={handleAudioChange}
                 className="hidden"
               />
-              <Music className="w-12 h-12 mx-auto text-zinc-500 mb-3" />
+              <Music className={cn('w-12 h-12 mx-auto mb-3', textMuted)} />
               {audioFile ? (
-                <p className="text-green-500">{audioFile.name}</p>
+                <p className={textSuccess}>{audioFile.name}</p>
               ) : (
-                <p className="text-zinc-400">Нажмите для выбора аудиофайла</p>
+                <p className={textMuted}>Нажмите для выбора аудиофайла</p>
               )}
             </div>
           </div>
 
           {/* Cover Upload */}
           <div className="space-y-2">
-            <Label className="text-zinc-300">Обложка</Label>
+            <Label className={labelClass}>Обложка</Label>
             <div
-              className="border-2 border-dashed border-zinc-700 rounded-lg p-8 text-center hover:border-zinc-500 transition-colors cursor-pointer"
+              className={cn(
+                'border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer',
+                borderDashed
+              )}
               onClick={() => document.getElementById('cover-upload').click()}
             >
               <input
@@ -171,11 +197,15 @@ export default function UploadTrackForm({ onSuccess }) {
                 className="hidden"
               />
               {coverPreview ? (
-                <img src={coverPreview} alt="Cover" className="w-32 h-32 mx-auto rounded-lg object-cover" />
+                <img
+                  src={coverPreview}
+                  alt="Cover"
+                  className="w-32 h-32 mx-auto rounded-lg object-cover"
+                />
               ) : (
                 <>
-                  <Image className="w-12 h-12 mx-auto text-zinc-500 mb-3" />
-                  <p className="text-zinc-400">Нажмите для выбора обложки</p>
+                  <Image className={cn('w-12 h-12 mx-auto mb-3', textMuted)} />
+                  <p className={textMuted}>Нажмите для выбора обложки</p>
                 </>
               )}
             </div>
@@ -184,7 +214,7 @@ export default function UploadTrackForm({ onSuccess }) {
           {/* Form Fields */}
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="title" className="text-zinc-300">
+              <Label htmlFor="title" className={labelClass}>
                 Название *
               </Label>
               <Input
@@ -192,11 +222,11 @@ export default function UploadTrackForm({ onSuccess }) {
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 placeholder="Название трека"
-                className="bg-zinc-800 border-zinc-700 text-white"
+                className={inputClass}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="artist" className="text-zinc-300">
+              <Label htmlFor="artist" className={labelClass}>
                 Исполнитель *
               </Label>
               <Input
@@ -204,18 +234,18 @@ export default function UploadTrackForm({ onSuccess }) {
                 value={formData.artist_name}
                 onChange={(e) => setFormData({ ...formData, artist_name: e.target.value })}
                 placeholder="Имя исполнителя"
-                className="bg-zinc-800 border-zinc-700 text-white"
+                className={inputClass}
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label className="text-zinc-300">Жанр</Label>
+            <Label className={labelClass}>Жанр</Label>
             <Select
               value={formData.genre}
               onValueChange={(value) => setFormData({ ...formData, genre: value })}
             >
-              <SelectTrigger className="bg-zinc-800 border-zinc-700 text-white">
+              <SelectTrigger className={selectTriggerClass}>
                 <SelectValue placeholder="Выберите жанр" />
               </SelectTrigger>
               <SelectContent>
@@ -229,7 +259,7 @@ export default function UploadTrackForm({ onSuccess }) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description" className="text-zinc-300">
+            <Label htmlFor="description" className={labelClass}>
               Описание
             </Label>
             <Textarea
@@ -237,7 +267,7 @@ export default function UploadTrackForm({ onSuccess }) {
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Расскажите о треке..."
-              className="bg-zinc-800 border-zinc-700 text-white min-h-24"
+              className={textareaClass}
             />
           </div>
 

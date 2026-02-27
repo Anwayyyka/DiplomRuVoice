@@ -4,16 +4,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Search, Home, Heart, BarChart3, Sun, Moon, Upload, Shield, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useTheme } from './contexts/ThemeContext';
 import AnimatedBackground from '@/components/ui/AnimatedBackground';
-import { mockUser } from '@/mocks/user';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Layout({ children }) {
   const location = useLocation();
   const { isDark, setIsDark } = useTheme();
-  const [user] = useState(mockUser); // или null для неавторизованного
+  const { user, logout } = useAuth();
 
-  // Базовые пункты меню
   const navItems = [
     { name: 'Главная', path: '/', icon: Home },
     { name: 'Поиск', path: '/search', icon: Search },
@@ -21,13 +20,14 @@ export default function Layout({ children }) {
     { name: 'Чарты', path: '/charts', icon: BarChart3 },
   ];
 
-  if (user) {
+ if (user) {
+  if (user.role === 'artist' || user.role === 'admin') {
     navItems.push({ name: 'Загрузить', path: '/upload', icon: Upload });
-    if (user.role === 'admin') {
-      navItems.push({ name: 'Модерация', path: '/moderation', icon: Shield });
-    }
   }
-
+  if (user.role === 'admin') {
+    navItems.push({ name: 'Модерация', path: '/moderation', icon: Shield });
+  }
+}
   const isActive = (path) => location.pathname === path;
 
   const sidebarClasses = isDark
@@ -35,35 +35,28 @@ export default function Layout({ children }) {
     : 'bg-white/90 border-gray-200 backdrop-blur-xl';
 
   const handleLogout = () => {
-    console.log('Logout');
-    // Здесь можно добавить toast или другую логику
+    logout();
   };
 
   const handleLogin = () => {
-    console.log('Login');
-    // Здесь можно добавить toast или перенаправление
+    // Перенаправление на страницу входа
+    window.location.href = '/login';
   };
 
   return (
     <div className={cn('min-h-screen flex', isDark ? 'text-white' : 'text-gray-900')}>
-      {/* Единый анимированный фон */}
       <AnimatedBackground isDark={isDark} />
 
-      {/* Sidebar */}
       <motion.aside
         className={cn('fixed left-0 top-0 bottom-0 w-48 border-r flex flex-col z-50', sidebarClasses)}
         initial={{ x: -200 }}
         animate={{ x: 0 }}
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
       >
-        {/* Logo */}
         <div className="p-6">
           <Link to="/" className="block">
             <motion.h1
-              className={cn(
-                'text-2xl font-bold tracking-wider',
-                isDark ? 'text-white' : 'text-gray-900'
-              )}
+              className={cn('text-2xl font-bold tracking-wider', isDark ? 'text-white' : 'text-gray-900')}
               style={{ fontFamily: 'serif', fontStyle: 'italic' }}
               whileHover={{ scale: 1.05 }}
             >
@@ -72,7 +65,6 @@ export default function Layout({ children }) {
           </Link>
         </div>
 
-        {/* Navigation */}
         <nav className="flex-1 px-2">
           {navItems.map((item, index) => {
             const Icon = item.icon;
@@ -103,7 +95,6 @@ export default function Layout({ children }) {
           })}
         </nav>
 
-        {/* Theme Toggle */}
         <div className="px-4 py-2">
           <motion.button
             onClick={() => setIsDark(!isDark)}
@@ -119,7 +110,6 @@ export default function Layout({ children }) {
           </motion.button>
         </div>
 
-        {/* User Profile */}
         <div className={cn('p-4 border-t', isDark ? 'border-zinc-800' : 'border-gray-200')}>
           {user ? (
             <div className="space-y-2">
@@ -168,7 +158,6 @@ export default function Layout({ children }) {
         </div>
       </motion.aside>
 
-      {/* Main Content */}
       <main className="flex-1 ml-48">
         <AnimatePresence mode="wait">
           <motion.div

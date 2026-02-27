@@ -1,50 +1,74 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import TrackRow from '../components/tracks/TrackRow';
 import TrackCardSmall from '../components/tracks/TrackCardSmall';
 import AudioPlayer from '../components/player/AudioPlayer';
-import { mockUser, mockTracks, mockFavorites } from '@/mocks/chartsData';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { tracksAPI } from '@/api/tracks';
+import { favoritesAPI } from '@/api/favorites';
 
 export default function Charts() {
-   const { isDark } = useTheme();
+  const { isDark } = useTheme();
+  const { user } = useAuth();
   const [currentTrack, setCurrentTrack] = useState(null);
   const [tracks, setTracks] = useState([]);
   const [favorites, setFavorites] = useState([]);
-  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Загрузка моковых данных
-  useEffect(() => {
-    setTimeout(() => {
-      const approvedTracks = mockTracks.filter(t => t.status === 'approved');
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const approvedTracks = await tracksAPI.getApprovedTracks();
       setTracks(approvedTracks);
-      setUser(mockUser);
-      setFavorites(mockFavorites.filter(f => f.user_email === mockUser.email));
+
+      if (user) {
+        const favs = await favoritesAPI.getUserFavorites(user.id);
+        setFavorites(favs);
+      } else {
+        setFavorites([]);
+      }
+    } catch (error) {
+      console.error('Failed to load charts:', error);
+    } finally {
       setLoading(false);
-    }, 500);
-  }, []);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const topTracks = [...tracks].sort((a, b) => (b.plays_count || 0) - (a.plays_count || 0));
   const topCards = topTracks.slice(0, 5);
   const topList = topTracks.slice(0, 10);
 
-  const playTrack = (track) => {
+  const playTrack = async (track) => {
     setCurrentTrack(track);
-    // Увеличиваем счётчик прослушиваний локально
-    setTracks(prev =>
-      prev.map(t => (t.id === track.id ? { ...t, plays_count: (t.plays_count || 0) + 1 } : t))
-    );
+    try {
+      await tracksAPI.playTrack(track.id);
+      setTracks(prev =>
+        prev.map(t => t.id === track.id ? { ...t, plays_count: (t.plays_count || 0) + 1 } : t)
+      );
+    } catch (error) {
+      console.error('Failed to update play count:', error);
+    }
   };
 
-  const toggleFavorite = (track) => {
+  const toggleFavorite = async (track) => {
     if (!user) return;
     const isFav = favorites.some(f => f.track_id === track.id);
-    if (isFav) {
-      setFavorites(prev => prev.filter(f => f.track_id !== track.id));
-    } else {
-      setFavorites(prev => [...prev, { track_id: track.id, user_email: user.email }]);
+    try {
+      if (isFav) {
+        await favoritesAPI.removeFavorite(user.id, track.id);
+        setFavorites(prev => prev.filter(f => f.track_id !== track.id));
+      } else {
+        const newFav = await favoritesAPI.addFavorite(user.id, track.id);
+        setFavorites(prev => [...prev, newFav]);
+      }
+    } catch (error) {
+      console.error('Failed to toggle favorite:', error);
     }
   };
 
@@ -73,7 +97,6 @@ export default function Charts() {
           <p className={textSecondary}>Топ треков по прослушиваниям</p>
         </motion.div>
 
-        {/* Top Cards */}
         <section className="mb-10">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             {topCards.map((track, index) => (
@@ -89,7 +112,6 @@ export default function Charts() {
           </div>
         </section>
 
-        {/* Top List */}
         <section>
           <motion.h2
             className={cn('text-2xl font-bold mb-4', textClass)}

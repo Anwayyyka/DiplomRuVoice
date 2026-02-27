@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, CheckCircle, XCircle, Music } from 'lucide-react';
@@ -6,8 +6,10 @@ import UploadTrackForm from '../components/upload/UploadTrackForm';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { mockUser, mockMyTracks } from '@/mocks/uploadData';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { tracksAPI } from '@/api/tracks';
+import { toast } from 'sonner';
 
 const statusConfig = {
   pending: { label: 'На модерации', icon: Clock, color: 'bg-yellow-500/20 text-yellow-500' },
@@ -16,21 +18,34 @@ const statusConfig = {
 };
 
 export default function Upload() {
-     const { isDark } = useTheme();
-  const [user, setUser] = useState(null);
+  const { isDark } = useTheme();
+  const { user } = useAuth();
   const [myTracks, setMyTracks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchMyTracks = useCallback(async () => {
+    if (!user) return;
+    try {
+      setLoading(true);
+      const tracks = await tracksAPI.getUserTracks(user.id);
+      setMyTracks(tracks);
+    } catch (err) {
+      console.error('Failed to load user tracks:', err);
+      setError('Не удалось загрузить ваши треки');
+      toast.error('Ошибка загрузки треков');
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
   useEffect(() => {
-    setTimeout(() => {
-      setUser(mockUser);
-      setMyTracks(mockMyTracks);
-      setLoading(false);
-    }, 500);
-  }, []);
+    fetchMyTracks();
+  }, [fetchMyTracks]);
 
   const handleUploadSuccess = (newTrack) => {
     setMyTracks(prev => [newTrack, ...prev]);
+    toast.success('Трек успешно загружен!');
   };
 
   const textClass = isDark ? 'text-white' : 'text-gray-900';
@@ -38,6 +53,13 @@ export default function Upload() {
   const cardBg = isDark
     ? 'bg-zinc-900/80 border-zinc-700 backdrop-blur-sm'
     : 'bg-white/80 border-gray-300 backdrop-blur-sm';
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Дата неизвестна';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Дата неизвестна';
+    return format(date, 'd MMM yyyy', { locale: ru });
+  };
 
   if (!user) {
     return (
@@ -68,12 +90,14 @@ export default function Upload() {
             <CardContent>
               {loading ? (
                 <p className={textSecondary}>Загрузка...</p>
+              ) : error ? (
+                <p className="text-red-500">{error}</p>
               ) : myTracks.length === 0 ? (
                 <p className={cn('text-center py-8', textSecondary)}>Вы ещё не загружали треки</p>
               ) : (
                 <div className="space-y-3">
                   {myTracks.map(track => {
-                    const status = statusConfig[track.status];
+                    const status = statusConfig[track.status] || statusConfig.pending;
                     const StatusIcon = status.icon;
                     return (
                       <div
@@ -91,7 +115,7 @@ export default function Upload() {
                         <div className="flex-1 min-w-0">
                           <p className={cn('font-medium truncate', textClass)}>{track.title}</p>
                           <p className={cn('text-sm', textSecondary)}>
-                            {format(new Date(track.created_date), 'd MMM yyyy', { locale: ru })}
+                            {formatDate(track.created_at || track.created_date)}
                           </p>
                           {track.status === 'rejected' && track.rejection_reason && (
                             <p className="text-sm text-red-400 mt-1">Причина: {track.rejection_reason}</p>

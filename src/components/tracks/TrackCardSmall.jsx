@@ -73,14 +73,14 @@ const TrackCardSmall = ({ track, onPlay, isDark, isPlaying }) => {
 
       <div className="p-3">
         <Link
-          to={`/track/${track.id}`} // замените на ваш роут
+          to={`/track/${track.id}`}
           onClick={(e) => e.stopPropagation()}
           className={cn('font-medium truncate text-sm hover:underline block', textClass)}
         >
           {track.title}
         </Link>
         <Link
-          to={`/artist/${encodeURIComponent(track.created_by)}`} // замените на ваш роут
+          to={`/artist/${encodeURIComponent(track.created_by)}`}
           onClick={(e) => e.stopPropagation()}
           className={cn('text-xs truncate hover:underline block', textSecondary)}
         >

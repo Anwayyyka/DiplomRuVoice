@@ -1,64 +1,92 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
+import { useParams, useSearchParams } from 'react-router-dom'; // или useParams, если email в url
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Play, Heart, Music, Headphones, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import TrackRow from '../components/tracks/TrackRow';
 import AudioPlayer from '../components/player/AudioPlayer';
-import { mockUsers, mockTracks, mockFavorites } from '@/mocks/artistData';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { usersAPI } from '@/api/users';
+import { tracksAPI } from '@/api/tracks';
+import { favoritesAPI } from '@/api/favorites';
 
 export default function Artist() {
   const { isDark } = useTheme();
-  const urlParams = new URLSearchParams(window.location.search);
-  const artistEmail = urlParams.get('email') || 'artist@example.com';
+  const { user: currentUser } = useAuth(); // текущий авторизованный пользователь
+  const [searchParams] = useSearchParams();
+  const artistEmail = searchParams.get('email') || '';
 
-  const [currentTrack, setCurrentTrack] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
-  const [users, setUsers] = useState([]);
+  const [artist, setArtist] = useState(null);
   const [artistTracks, setArtistTracks] = useState([]);
   const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [currentTrack, setCurrentTrack] = useState(null);
 
-  // Загрузка моковых данных
-  useEffect(() => {
-    setTimeout(() => {
-      const mockCurrentUser = { email: 'user@example.com', full_name: 'Текущий пользователь' };
-      const mockUsersList = mockUsers;
-      const artist = mockUsersList.find(u => u.email === artistEmail) || mockUsersList[0];
-      const tracks = mockTracks.filter(t => t.created_by === artist.email && t.status === 'approved');
-      const favs = mockFavorites.filter(f => f.user_email === mockCurrentUser.email);
+  // Загрузка данных артиста и его треков
+  const fetchArtistData = useCallback(async () => {
+    if (!artistEmail) return;
+    setLoading(true);
+    try {
+      // 1. Получить информацию об артисте по email (предположим, есть эндпоинт)
+      const artistData = await usersAPI.getUserByEmail(artistEmail);
+      setArtist(artistData);
 
-      setCurrentUser(mockCurrentUser);
-      setUsers(mockUsersList);
+      // 2. Получить одобренные треки этого артиста
+      const tracks = await tracksAPI.getArtistTracks(artistData.id); // предположим, есть такой метод
       setArtistTracks(tracks);
-      setFavorites(favs);
+
+      // 3. Если пользователь авторизован, получить его избранное (чтобы отметить лайки)
+      if (currentUser) {
+        const favs = await favoritesAPI.getUserFavorites(currentUser.id);
+        setFavorites(favs);
+      } else {
+        setFavorites([]);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
       setLoading(false);
-    }, 500);
-  }, [artistEmail]);
+    }
+  }, [artistEmail, currentUser]);
 
-  const artist = users.find(u => u.email === artistEmail);
+  useEffect(() => {
+    fetchArtistData();
+  }, [fetchArtistData]);
 
-  // Статистика
   const totalPlays = artistTracks.reduce((sum, t) => sum + (t.plays_count || 0), 0);
   const totalLikes = artistTracks.reduce((sum, t) => sum + (t.likes_count || 0), 0);
 
-  const playTrack = (track) => {
+  const playTrack = async (track) => {
     setCurrentTrack(track);
-    // Увеличиваем счётчик прослушиваний локально
-    setArtistTracks(prev =>
-      prev.map(t => (t.id === track.id ? { ...t, plays_count: (t.plays_count || 0) + 1 } : t))
-    );
+    // Увеличиваем счётчик прослушиваний на сервере
+    try {
+      await tracksAPI.playTrack(track.id);
+      // Обновляем счётчик локально (или перезапросить данные)
+      setArtistTracks(prev =>
+        prev.map(t => t.id === track.id ? { ...t, plays_count: (t.plays_count || 0) + 1 } : t)
+      );
+    } catch (error) {
+      console.error('Failed to update play count:', error);
+    }
   };
 
-  const toggleFavorite = (track) => {
+  const toggleFavorite = async (track) => {
     if (!currentUser) return;
     const isFav = favorites.some(f => f.track_id === track.id);
-    if (isFav) {
-      setFavorites(prev => prev.filter(f => f.track_id !== track.id));
-    } else {
-      setFavorites(prev => [...prev, { track_id: track.id, user_email: currentUser.email }]);
+    try {
+      if (isFav) {
+        await favoritesAPI.removeFavorite(currentUser.id, track.id);
+        setFavorites(prev => prev.filter(f => f.track_id !== track.id));
+      } else {
+        const newFav = await favoritesAPI.addFavorite(currentUser.id, track.id);
+        setFavorites(prev => [...prev, newFav]);
+      }
+    } catch (error) {
+      console.error('Failed to toggle favorite:', error);
     }
   };
 
@@ -81,6 +109,14 @@ export default function Artist() {
     return (
       <div className="relative min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500" />
+      </div>
+    );
+  }
+
+  if (error || !artist) {
+    return (
+      <div className="relative min-h-screen flex items-center justify-center">
+        <p className={textSecondary}>Артист не найден</p>
       </div>
     );
   }

@@ -1,30 +1,47 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import { Search as SearchIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import TrackRow from '../components/tracks/TrackRow';
 import AudioPlayer from '../components/player/AudioPlayer';
-import { mockUser, mockTracks, mockFavorites } from '@/mocks/homeData';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { tracksAPI } from '@/api/tracks';
+import { favoritesAPI } from '@/api/favorites';
+import { toast } from 'sonner';
 
 export default function Search() {
-   const { isDark } = useTheme();
+  const { isDark } = useTheme();
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [currentTrack, setCurrentTrack] = useState(null);
-  const [user, setUser] = useState(null);
   const [tracks, setTracks] = useState([]);
   const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    setTimeout(() => {
-      setUser(mockUser);
-      setTracks(mockTracks.filter(t => t.status === 'approved'));
-      setFavorites(mockFavorites.filter(f => f.user_email === mockUser.email));
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const approvedTracks = await tracksAPI.getApprovedTracks();
+      setTracks(approvedTracks);
+      if (user) {
+        const favs = await favoritesAPI.getUserFavorites(user.id);
+        setFavorites(favs);
+      } else {
+        setFavorites([]);
+      }
+    } catch (error) {
+      console.error('Failed to load data:', error);
+      toast.error('Не удалось загрузить треки');
+    } finally {
       setLoading(false);
-    }, 500);
-  }, []);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const filteredTracks = tracks.filter(
     track =>
@@ -32,20 +49,32 @@ export default function Search() {
       track.artist_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const playTrack = (track) => {
+  const playTrack = async (track) => {
     setCurrentTrack(track);
-    setTracks(prev =>
-      prev.map(t => (t.id === track.id ? { ...t, plays_count: (t.plays_count || 0) + 1 } : t))
-    );
+    try {
+      await tracksAPI.playTrack(track.id);
+      setTracks(prev =>
+        prev.map(t => t.id === track.id ? { ...t, plays_count: (t.plays_count || 0) + 1 } : t)
+      );
+    } catch (error) {
+      console.error('Failed to update play count:', error);
+    }
   };
 
-  const toggleFavorite = (track) => {
+  const toggleFavorite = async (track) => {
     if (!user) return;
     const isFav = favorites.some(f => f.track_id === track.id);
-    if (isFav) {
-      setFavorites(prev => prev.filter(f => f.track_id !== track.id));
-    } else {
-      setFavorites(prev => [...prev, { track_id: track.id, user_email: user.email }]);
+    try {
+      if (isFav) {
+        await favoritesAPI.removeFavorite(user.id, track.id);
+        setFavorites(prev => prev.filter(f => f.track_id !== track.id));
+      } else {
+        const newFav = await favoritesAPI.addFavorite(user.id, track.id);
+        setFavorites(prev => [...prev, newFav]);
+      }
+    } catch (error) {
+      console.error('Failed to toggle favorite:', error);
+      toast.error('Ошибка при изменении избранного');
     }
   };
 

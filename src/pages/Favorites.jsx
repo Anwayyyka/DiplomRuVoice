@@ -1,42 +1,63 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Heart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import TrackRow from '../components/tracks/TrackRow';
 import AudioPlayer from '../components/player/AudioPlayer';
-import { mockUser, mockTracks, mockFavorites } from '@/mocks/favoritesData';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { tracksAPI } from '@/api/tracks';
+import { favoritesAPI } from '@/api/favorites';
 
 export default function Favorites() {
-   const { isDark } = useTheme();
+  const { isDark } = useTheme();
+  const { user } = useAuth();
   const [currentTrack, setCurrentTrack] = useState(null);
-  const [user, setUser] = useState(null);
-  const [allTracks, setAllTracks] = useState([]);
-  const [favorites, setFavorites] = useState([]);
+  const [favoriteTracks, setFavoriteTracks] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    setTimeout(() => {
-      setUser(mockUser);
-      setAllTracks(mockTracks.filter(t => t.status === 'approved'));
-      setFavorites(mockFavorites);
+  const fetchFavorites = useCallback(async () => {
+    if (!user) {
       setLoading(false);
-    }, 500);
-  }, []);
+      setFavoriteTracks([]);
+      return;
+    }
+    try {
+      setLoading(true);
+      // Ожидаем, что API возвращает массив полных объектов треков
+      const tracks = await favoritesAPI.getUserFavorites(user.id);
+      setFavoriteTracks(tracks);
+    } catch (error) {
+      console.error('Failed to load favorites:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
-  const favoriteTracks = allTracks.filter(track =>
-    favorites.some(f => f.track_id === track.id)
-  );
+  useEffect(() => {
+    fetchFavorites();
+  }, [fetchFavorites]);
 
-  const playTrack = (track) => {
+  const playTrack = async (track) => {
     setCurrentTrack(track);
-    setAllTracks(prev =>
-      prev.map(t => (t.id === track.id ? { ...t, plays_count: (t.plays_count || 0) + 1 } : t))
-    );
+    try {
+      await tracksAPI.playTrack(track.id);
+      setFavoriteTracks(prev =>
+        prev.map(t => t.id === track.id ? { ...t, plays_count: (t.plays_count || 0) + 1 } : t)
+      );
+    } catch (error) {
+      console.error('Failed to update play count:', error);
+    }
   };
 
-  const removeFromFavorites = (track) => {
-    setFavorites(prev => prev.filter(f => f.track_id !== track.id));
+  const removeFromFavorites = async (track) => {
+    if (!user) return;
+    try {
+      await favoritesAPI.removeFavorite(user.id, track.id);
+      setFavoriteTracks(prev => prev.filter(t => t.id !== track.id));
+    } catch (error) {
+      console.error('Failed to remove from favorites:', error);
+    }
   };
 
   const textClass = isDark ? 'text-white' : 'text-gray-900';
