@@ -123,6 +123,9 @@ export default function Profile() {
     ? 'bg-zinc-800/50 backdrop-blur-sm border-zinc-700'
     : 'bg-white/80 backdrop-blur-sm border-gray-200';
   const inputBg = isDark ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-white border-gray-200 text-gray-900';
+  const btnOutline = isDark
+    ? 'border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700 hover:text-white'
+    : '';
 
   if (loading) {
     return (
@@ -181,19 +184,19 @@ export default function Profile() {
                   <div className="flex gap-2 flex-wrap">
                     {user.role === 'artist' && (
                       <Link to="/statistics">
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="sm" className={btnOutline}>
                           <BarChart3 className="w-4 h-4 mr-2" />
                           Статистика
                         </Button>
                       </Link>
                     )}
                     <Link to="/settings">
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" className={btnOutline}>
                         <Settings className="w-4 h-4 mr-2" />
                         Настройки
                       </Button>
                     </Link>
-                    <Button onClick={startEditing} variant="outline" size="sm">
+                    <Button onClick={startEditing} variant="outline" size="sm" className={btnOutline}>
                       <Edit className="w-4 h-4 mr-2" />
                       Редактировать
                     </Button>
