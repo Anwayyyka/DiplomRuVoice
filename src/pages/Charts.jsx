@@ -87,7 +87,7 @@ export default function Charts() {
 
   return (
     <div className="relative min-h-screen">
-      <div className="relative z-10 p-8 pb-32">
+      <div className="relative z-10 p-4 sm:p-6 lg:p-8 pb-32">
         <motion.div
           className="mb-8"
           initial={{ opacity: 0, y: -20 }}

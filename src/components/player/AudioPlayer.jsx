@@ -120,7 +120,7 @@ const AudioPlayer = ({
   return (
     <AnimatePresence>
       <motion.div
-        className={cn('fixed bottom-0 left-48 right-0 border-t p-4 z-50', theme.bg)}
+        className={cn('fixed bottom-0 left-0 md:left-48 right-0 border-t p-3 sm:p-4 z-40', theme.bg)}
         initial={{ y: 100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 100, opacity: 0 }}
@@ -133,10 +133,10 @@ const AudioPlayer = ({
           onEnded={onNext}
         />
 
-        <div className="max-w-5xl mx-auto flex items-center gap-4">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
           {/* Информация о треке */}
           <motion.div
-            className="flex items-center gap-3 w-56 min-w-0"
+            className="flex items-center gap-2 sm:gap-3 w-full sm:w-56 min-w-0"
             initial={{ x: -20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             key={track.id}
@@ -224,8 +224,8 @@ const AudioPlayer = ({
             </div>
           </div>
 
-          {/* Регулятор громкости */}
-          <div className="flex items-center gap-2 w-32">
+          {/* Регулятор громкости (скрыт на очень узких экранах) */}
+          <div className="hidden sm:flex items-center gap-2 w-24 lg:w-32">
             <motion.button
               onClick={() => setIsMuted(!isMuted)}
               className={cn('p-2 rounded-full', theme.textSecondary)}

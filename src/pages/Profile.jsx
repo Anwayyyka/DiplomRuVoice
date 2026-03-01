@@ -158,30 +158,30 @@ export default function Profile() {
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
         </div>
 
-        <div className="max-w-4xl mx-auto px-6 -mt-20 relative z-10 pb-32">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 -mt-16 sm:-mt-20 relative z-10 pb-32">
           {/* Profile Header */}
           <motion.div
-            className={cn('rounded-2xl p-6 mb-6 border', cardBg)}
+            className={cn('rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 border', cardBg)}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <div className="flex items-start gap-6 flex-wrap">
-              <Avatar className="w-28 h-28 ring-4 ring-purple-500/50">
+            <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
+              <Avatar className="w-20 h-20 sm:w-28 sm:h-28 ring-4 ring-purple-500/50 shrink-0">
                 {user?.avatar_url ? <AvatarImage src={user.avatar_url} /> : null}
                 <AvatarFallback className="bg-gradient-to-br from-purple-600 to-pink-600 text-white text-3xl">
                   {user.full_name?.[0] || user.email?.[0]?.toUpperCase()}
                 </AvatarFallback>
               </Avatar>
 
-              <div className="flex-1">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h1 className={cn('text-2xl font-bold', textClass)}>
+              <div className="flex-1 w-full min-w-0">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                  <div className="min-w-0">
+                    <h1 className={cn('text-xl sm:text-2xl font-bold truncate', textClass)}>
                       {user.full_name || 'Пользователь'}
                     </h1>
                     <p className={textSecondary}>{user.email}</p>
                   </div>
-                  <div className="flex gap-2 flex-wrap">
+                  <div className="flex flex-wrap gap-2">
                     {user.role === 'artist' && (
                       <Link to="/statistics">
                         <Button variant="outline" size="sm" className={btnOutline}>
@@ -220,7 +220,7 @@ export default function Profile() {
 
                 {/* Stats Cards */}
                 {user.role === 'artist' && (
-                  <div className="grid grid-cols-4 gap-4 mt-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-6">
                     <motion.div
                       className={cn('p-4 rounded-xl text-center border', cardBg)}
                       whileHover={{ scale: 1.02 }}
@@ -307,7 +307,7 @@ export default function Profile() {
 
           {/* Tabs */}
           <Tabs defaultValue={user.role === 'artist' ? 'tracks' : 'liked'} className="w-full">
-            <TabsList className={cn('w-full justify-start mb-6 border', cardBg)}>
+            <TabsList className={cn('w-full justify-start mb-6 border overflow-x-auto flex-nowrap', cardBg)}>
               {user.role === 'artist' && (
                 <>
                   <TabsTrigger value="tracks">Мои треки ({approvedTracks.length})</TabsTrigger>

@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
@@ -17,7 +17,6 @@ import Statistics from './pages/Statistics';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import BecomeArtist from './pages/BecomeArtist';
-import UploadTrack from './pages/UploadTrack';
 import MyRequests from './pages/MyRequests';
 
 function App() {
@@ -41,7 +40,7 @@ function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/become-artist" element={<BecomeArtist />} />
-              <Route path="/upload-track" element={<UploadTrack />} />
+              <Route path="/upload-track" element={<Navigate to="/upload" replace />} />
               <Route path="/my-requests" element={<MyRequests />} />
               <Route path="*" element={<div>404 Not Found</div>} />
             </Routes>

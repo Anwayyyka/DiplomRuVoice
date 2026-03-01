@@ -55,7 +55,7 @@ export default function DetailsModal({
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
-        className={cn('max-w-2xl max-h-[90vh] flex flex-col', contentBg)}
+        className={cn('w-[95vw] max-w-2xl max-h-[90vh] flex flex-col', contentBg)}
       >
         <DialogHeader>
           <DialogTitle className={textClass}>{title}</DialogTitle>

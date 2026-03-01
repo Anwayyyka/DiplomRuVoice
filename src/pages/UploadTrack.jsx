@@ -40,19 +40,21 @@ export default function UploadTrack({ isDark: isDarkProp }) {
     albumId: '',
     newAlbumTitle: '',
     newAlbumType: 'single',
-    releaseType: 'single',
+    releaseType: 'single', // сингл / альбом / EP
     language: 'ru',
     lyrics: '',
+    authorLyrics: '',      // автор текста
+    authorBeat: '',       // автор бита
+    authorComposer: '',   // автор всего (композитор)
+    copyright: '',
+    releaseDate: '',
+    presaveUrl: '',       // ссылка на пресейв (Spotify, Apple Music и т.д.)
     bpm: '',
     key: '',
     mood: [],
     tags: '',
     explicit: false,
     isrc: '',
-    composer: '',
-    author: '',
-    copyright: '',
-    releaseDate: '',
   });
 
   const textClass = isDark ? 'text-white' : 'text-gray-900';
@@ -85,7 +87,7 @@ export default function UploadTrack({ isDark: isDarkProp }) {
   };
 
   const addAuthor = () => {
-    setExtraAuthors((prev) => [...prev, { composer: '', author: '' }]);
+    setExtraAuthors((prev) => [...prev, { role: '', name: '' }]);
   };
 
   const toggleMood = (value) => {
@@ -136,94 +138,184 @@ export default function UploadTrack({ isDark: isDarkProp }) {
                 </TabsTrigger>
               </TabsList>
 
-              {/* Вкладка: Основная информация */}
+              {/* Вкладка: Основная информация — обложка, тип, альбом, текст, авторы, дата, пресейв */}
               <TabsContent value="main" className="space-y-4">
+                {/* 1. Обложка */}
                 <div className="space-y-2">
-                  <Label htmlFor="title" className={labelClass}>Название трека *</Label>
-                  <Input
-                    id="title"
-                    value={form.title}
-                    onChange={(e) => setForm({ ...form, title: e.target.value })}
-                    placeholder="Название"
-                    className={inputClass}
-                  />
+                  <Label className={labelClass}>Обложка *</Label>
+                  <div
+                    className={cn(
+                      'border-2 border-dashed rounded-lg p-4 sm:p-6 text-center cursor-pointer transition-colors',
+                      borderDashed
+                    )}
+                    onClick={() => document.getElementById('cover-upload-main')?.click()}
+                  >
+                    <input
+                      id="cover-upload-main"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleCover}
+                      className="hidden"
+                    />
+                    {coverPreview ? (
+                      <img src={coverPreview} alt="Обложка" className="w-24 h-24 sm:w-32 sm:h-32 mx-auto rounded-lg object-cover" />
+                    ) : (
+                      <>
+                        <Image className={cn('w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2', textSecondary)} />
+                        <p className={cn('text-sm', textSecondary)}>Клик или перетащите изображение</p>
+                      </>
+                    )}
+                  </div>
                 </div>
+
+                {/* 2. Тип релиза (сингл / альбом / EP) */}
                 <div className="space-y-2">
-                  <Label htmlFor="artistName" className={labelClass}>Исполнитель</Label>
-                  <Input
-                    id="artistName"
-                    value={form.artistName}
-                    onChange={(e) => setForm({ ...form, artistName: e.target.value })}
-                    className={inputClass}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className={labelClass}>Альбом</Label>
-                  <Select value={form.albumId} onValueChange={handleAlbumChange}>
+                  <Label className={labelClass}>Тип релиза *</Label>
+                  <Select
+                    value={form.releaseType}
+                    onValueChange={(v) => setForm({ ...form, releaseType: v })}
+                  >
                     <SelectTrigger className={inputClass}>
-                      <SelectValue placeholder="Выберите или создайте альбом" />
+                      <SelectValue placeholder="Сингл / Альбом / EP" />
                     </SelectTrigger>
                     <SelectContent>
-                      {MOCK_ALBUMS.map((a) => (
-                        <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
+                      {RELEASE_TYPES.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                {createNewAlbum && (
-                  <div className={cn('p-4 rounded-lg space-y-3', isDark ? 'bg-zinc-800/50' : 'bg-gray-100')}>
-                    <Label className={labelClass}>Новый альбом</Label>
-                    <Input
-                      value={form.newAlbumTitle}
-                      onChange={(e) => setForm({ ...form, newAlbumTitle: e.target.value })}
-                      placeholder="Название альбома"
-                      className={inputClass}
-                    />
-                    <div className="space-y-2">
-                      <Label className={labelClass}>Тип</Label>
-                      <Select
-                        value={form.newAlbumType}
-                        onValueChange={(v) => setForm({ ...form, newAlbumType: v })}
-                      >
-                        <SelectTrigger className={inputClass}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {RELEASE_TYPES.map((r) => (
-                            <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <p className={cn('text-xs', textSecondary)}>Обложку можно добавить во вкладке «Файлы»</p>
-                  </div>
-                )}
-                <div className="grid gap-4 sm:grid-cols-2">
+
+                {/* 3. Выбор альбома (если не сингл) */}
+                {(form.releaseType === 'album' || form.releaseType === 'ep') && (
                   <div className="space-y-2">
-                    <Label className={labelClass}>Тип релиза</Label>
-                    <Select
-                      value={form.releaseType}
-                      onValueChange={(v) => setForm({ ...form, releaseType: v })}
-                    >
+                    <Label className={labelClass}>Альбом</Label>
+                    <Select value={form.albumId} onValueChange={handleAlbumChange}>
                       <SelectTrigger className={inputClass}>
-                        <SelectValue />
+                        <SelectValue placeholder="Выберите или создайте альбом" />
                       </SelectTrigger>
                       <SelectContent>
-                        {RELEASE_TYPES.map((r) => (
-                          <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                        {MOCK_ALBUMS.map((a) => (
+                          <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {createNewAlbum && (
+                      <div className={cn('p-3 rounded-lg space-y-2 mt-2', isDark ? 'bg-zinc-800/50' : 'bg-gray-100')}>
+                        <Input
+                          value={form.newAlbumTitle}
+                          onChange={(e) => setForm({ ...form, newAlbumTitle: e.target.value })}
+                          placeholder="Название альбома"
+                          className={inputClass}
+                        />
+                        <Select
+                          value={form.newAlbumType}
+                          onValueChange={(v) => setForm({ ...form, newAlbumType: v })}
+                        >
+                          <SelectTrigger className={inputClass}>
+                            <SelectValue placeholder="Тип альбома" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {RELEASE_TYPES.map((r) => (
+                              <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="title" className={labelClass}>Название трека *</Label>
+                    <Input
+                      id="title"
+                      value={form.title}
+                      onChange={(e) => setForm({ ...form, title: e.target.value })}
+                      placeholder="Название"
+                      className={inputClass}
+                    />
                   </div>
                   <div className="space-y-2">
+                    <Label htmlFor="artistName" className={labelClass}>Исполнитель</Label>
+                    <Input
+                      id="artistName"
+                      value={form.artistName}
+                      onChange={(e) => setForm({ ...form, artistName: e.target.value })}
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+
+                {/* 4. Текст трека */}
+                <div className="space-y-2">
+                  <Label htmlFor="lyrics" className={labelClass}>Текст песни</Label>
+                  <Textarea
+                    id="lyrics"
+                    value={form.lyrics}
+                    onChange={(e) => setForm({ ...form, lyrics: e.target.value })}
+                    placeholder="Текст трека..."
+                    className={cn(inputClass, 'min-h-[120px]')}
+                  />
+                </div>
+
+                {/* 5–7. Авторы: текст, бит, всё */}
+                <div className={cn('p-4 rounded-lg space-y-3', isDark ? 'bg-zinc-800/50' : 'bg-gray-100')}>
+                  <p className={cn('text-sm font-medium', labelClass)}>Авторы</p>
+                  <div className="space-y-2">
+                    <Input
+                      value={form.authorLyrics}
+                      onChange={(e) => setForm({ ...form, authorLyrics: e.target.value })}
+                      placeholder="Автор текста (кто написал слова)"
+                      className={inputClass}
+                    />
+                    <Input
+                      value={form.authorBeat}
+                      onChange={(e) => setForm({ ...form, authorBeat: e.target.value })}
+                      placeholder="Автор бита (продюсер)"
+                      className={inputClass}
+                    />
+                    <Input
+                      value={form.authorComposer}
+                      onChange={(e) => setForm({ ...form, authorComposer: e.target.value })}
+                      placeholder="Автор всего / композитор"
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+
+                {/* 8. Дата релиза */}
+                <div className="space-y-2">
+                  <Label htmlFor="releaseDate" className={labelClass}>Дата релиза *</Label>
+                  <Input
+                    id="releaseDate"
+                    type="date"
+                    value={form.releaseDate}
+                    onChange={(e) => setForm({ ...form, releaseDate: e.target.value })}
+                    className={inputClass}
+                  />
+                </div>
+
+                {/* 9. Пресейв */}
+                <div className="space-y-2">
+                  <Label htmlFor="presaveUrl" className={labelClass}>Ссылка на пресейв</Label>
+                  <Input
+                    id="presaveUrl"
+                    type="url"
+                    value={form.presaveUrl}
+                    onChange={(e) => setForm({ ...form, presaveUrl: e.target.value })}
+                    placeholder="https://... (Spotify, Apple Music, и т.д.)"
+                    className={inputClass}
+                  />
+                  <p className={cn('text-xs', textSecondary)}>Ссылка для предзаказа или пресейва на стриминговых платформах</p>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
                     <Label className={labelClass}>Язык</Label>
-                    <Select
-                      value={form.language}
-                      onValueChange={(v) => setForm({ ...form, language: v })}
-                    >
-                      <SelectTrigger className={inputClass}>
-                        <SelectValue />
-                      </SelectTrigger>
+                    <Select value={form.language} onValueChange={(v) => setForm({ ...form, language: v })}>
+                      <SelectTrigger className={inputClass}><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {LANGUAGES.map((l) => (
                           <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
@@ -231,16 +323,6 @@ export default function UploadTrack({ isDark: isDarkProp }) {
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="lyrics" className={labelClass}>Текст песни</Label>
-                  <Textarea
-                    id="lyrics"
-                    value={form.lyrics}
-                    onChange={(e) => setForm({ ...form, lyrics: e.target.value })}
-                    placeholder="Текст..."
-                    className={cn(inputClass, 'min-h-[120px]')}
-                  />
                 </div>
               </TabsContent>
 
@@ -333,28 +415,11 @@ export default function UploadTrack({ isDark: isDarkProp }) {
                 </div>
               </TabsContent>
 
-              {/* Вкладка: Авторы и права */}
+              {/* Вкладка: Авторы и права (дополнительные) */}
               <TabsContent value="authors" className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="composer" className={labelClass}>Композитор</Label>
-                  <Input
-                    id="composer"
-                    value={form.composer}
-                    onChange={(e) => setForm({ ...form, composer: e.target.value })}
-                    placeholder="ФИО или псевдоним"
-                    className={inputClass}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="author" className={labelClass}>Автор слов</Label>
-                  <Input
-                    id="author"
-                    value={form.author}
-                    onChange={(e) => setForm({ ...form, author: e.target.value })}
-                    placeholder="ФИО или псевдоним"
-                    className={inputClass}
-                  />
-                </div>
+                <p className={cn('text-sm', textSecondary)}>
+                  Основные авторы (текст, бит, композитор) указаны во вкладке «Основное». Здесь — дополнительные участники и права.
+                </p>
                 <div className="space-y-2">
                   <Label htmlFor="copyright" className={labelClass}>Информация об авторских правах</Label>
                   <Textarea
@@ -368,21 +433,21 @@ export default function UploadTrack({ isDark: isDarkProp }) {
                 {extraAuthors.map((_, i) => (
                   <div key={i} className={cn('p-3 rounded-lg space-y-2', isDark ? 'bg-zinc-800/50' : 'bg-gray-100')}>
                     <Input
-                      placeholder="Композитор"
-                      value={extraAuthors[i]?.composer}
+                      placeholder="Роль (например: сведение, мастеринг)"
+                      value={extraAuthors[i]?.role}
                       onChange={(e) => {
                         const next = [...extraAuthors];
-                        next[i] = { ...next[i], composer: e.target.value };
+                        next[i] = { ...next[i], role: e.target.value };
                         setExtraAuthors(next);
                       }}
                       className={inputClass}
                     />
                     <Input
-                      placeholder="Автор слов"
-                      value={extraAuthors[i]?.author}
+                      placeholder="Имя"
+                      value={extraAuthors[i]?.name}
                       onChange={(e) => {
                         const next = [...extraAuthors];
-                        next[i] = { ...next[i], author: e.target.value };
+                        next[i] = { ...next[i], name: e.target.value };
                         setExtraAuthors(next);
                       }}
                       className={inputClass}
@@ -390,44 +455,14 @@ export default function UploadTrack({ isDark: isDarkProp }) {
                   </div>
                 ))}
                 <Button type="button" variant="outline" onClick={addAuthor}>
-                  Добавить ещё автора
+                  Добавить ещё участника
                 </Button>
               </TabsContent>
 
-              {/* Вкладка: Загрузка файлов */}
+              {/* Вкладка: Аудиофайл */}
               <TabsContent value="files" className="space-y-4">
                 <div className="space-y-2">
-                  <Label className={labelClass}>Обложка</Label>
-                  <div
-                    className={cn(
-                      'border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors',
-                      borderDashed
-                    )}
-                    onClick={() => document.getElementById('cover-upload')?.click()}
-                  >
-                    <input
-                      id="cover-upload"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleCover}
-                      className="hidden"
-                    />
-                    {coverPreview ? (
-                      <img
-                        src={coverPreview}
-                        alt="Обложка"
-                        className="w-32 h-32 mx-auto rounded-lg object-cover"
-                      />
-                    ) : (
-                      <>
-                        <Image className={cn('w-12 h-12 mx-auto mb-2', textSecondary)} />
-                        <p className={cn('text-sm', textSecondary)}>Клик или перетащите изображение</p>
-                      </>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label className={labelClass}>Аудиофайл</Label>
+                  <Label className={labelClass}>Аудиофайл *</Label>
                   <div
                     className={cn(
                       'border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors',
@@ -452,16 +487,7 @@ export default function UploadTrack({ isDark: isDarkProp }) {
                     )}
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="releaseDate" className={labelClass}>Дата релиза</Label>
-                  <Input
-                    id="releaseDate"
-                    type="date"
-                    value={form.releaseDate}
-                    onChange={(e) => setForm({ ...form, releaseDate: e.target.value })}
-                    className={inputClass}
-                  />
-                </div>
+                <p className={cn('text-xs', textSecondary)}>Обложка, дата релиза и остальные поля — во вкладке «Основное»</p>
               </TabsContent>
             </Tabs>
 

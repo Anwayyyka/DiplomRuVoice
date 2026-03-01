@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +16,7 @@ import { Upload, Music, Image, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from '@/lib/utils';
 import { tracksAPI } from '@/api/tracks';
+import { RELEASE_TYPES } from '@/mocks/uploadFormData';
 
 const genres = [
   { value: 'pop', label: 'Поп' },
@@ -39,6 +41,13 @@ export default function UploadTrackForm({ onSuccess, isDark = true }) {
     artist_name: '',
     genre: '',
     description: '',
+    release_type: 'single',
+    lyrics: '',
+    author_lyrics: '',
+    author_beat: '',
+    author_composer: '',
+    release_date: '',
+    presave_url: '',
   });
   const [audioFile, setAudioFile] = useState(null);
   const [coverFile, setCoverFile] = useState(null);
@@ -116,6 +125,13 @@ export default function UploadTrackForm({ onSuccess, isDark = true }) {
       formDataToSend.append('title', formData.title);
       formDataToSend.append('artist_name', formData.artist_name);
       formDataToSend.append('description', formData.description);
+      formDataToSend.append('release_type', formData.release_type);
+      formDataToSend.append('lyrics', formData.lyrics);
+      formDataToSend.append('author_lyrics', formData.author_lyrics);
+      formDataToSend.append('author_beat', formData.author_beat);
+      formDataToSend.append('author_composer', formData.author_composer);
+      formDataToSend.append('release_date', formData.release_date);
+      formDataToSend.append('presave_url', formData.presave_url);
       if (formData.genre) {
         formDataToSend.append('genre_id', formData.genre);
       }
@@ -131,7 +147,11 @@ export default function UploadTrackForm({ onSuccess, isDark = true }) {
       onSuccess?.(result);
 
       // Сброс формы
-      setFormData({ title: '', artist_name: '', genre: '', description: '' });
+      setFormData({
+        title: '', artist_name: '', genre: '', description: '',
+        release_type: 'single', lyrics: '', author_lyrics: '', author_beat: '', author_composer: '',
+        release_date: '', presave_url: '',
+      });
       setAudioFile(null);
       setCoverFile(null);
       setCoverPreview(null);
@@ -212,11 +232,26 @@ export default function UploadTrackForm({ onSuccess, isDark = true }) {
           </div>
 
           {/* Form Fields */}
+          <div className="space-y-2">
+            <Label className={labelClass}>Тип релиза</Label>
+            <Select
+              value={formData.release_type}
+              onValueChange={(v) => setFormData({ ...formData, release_type: v })}
+            >
+              <SelectTrigger className={selectTriggerClass}>
+                <SelectValue placeholder="Сингл / Альбом / EP" />
+              </SelectTrigger>
+              <SelectContent>
+                {RELEASE_TYPES.map((r) => (
+                  <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="title" className={labelClass}>
-                Название *
-              </Label>
+              <Label htmlFor="title" className={labelClass}>Название *</Label>
               <Input
                 id="title"
                 value={formData.title}
@@ -226,9 +261,7 @@ export default function UploadTrackForm({ onSuccess, isDark = true }) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="artist" className={labelClass}>
-                Исполнитель *
-              </Label>
+              <Label htmlFor="artist" className={labelClass}>Исполнитель *</Label>
               <Input
                 id="artist"
                 value={formData.artist_name}
@@ -237,6 +270,62 @@ export default function UploadTrackForm({ onSuccess, isDark = true }) {
                 className={inputClass}
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="lyrics" className={labelClass}>Текст песни</Label>
+            <Textarea
+              id="lyrics"
+              value={formData.lyrics}
+              onChange={(e) => setFormData({ ...formData, lyrics: e.target.value })}
+              placeholder="Текст трека..."
+              className={textareaClass}
+            />
+          </div>
+
+          <div className={cn('p-3 rounded-lg space-y-2', isDark ? 'bg-zinc-800/50' : 'bg-gray-100')}>
+            <p className={cn('text-sm font-medium', labelClass)}>Авторы</p>
+            <Input
+              value={formData.author_lyrics}
+              onChange={(e) => setFormData({ ...formData, author_lyrics: e.target.value })}
+              placeholder="Автор текста"
+              className={inputClass}
+            />
+            <Input
+              value={formData.author_beat}
+              onChange={(e) => setFormData({ ...formData, author_beat: e.target.value })}
+              placeholder="Автор бита (продюсер)"
+              className={inputClass}
+            />
+            <Input
+              value={formData.author_composer}
+              onChange={(e) => setFormData({ ...formData, author_composer: e.target.value })}
+              placeholder="Автор всего / композитор"
+              className={inputClass}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="release_date" className={labelClass}>Дата релиза</Label>
+            <Input
+              id="release_date"
+              type="date"
+              value={formData.release_date}
+              onChange={(e) => setFormData({ ...formData, release_date: e.target.value })}
+              className={inputClass}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="presave_url" className={labelClass}>Ссылка на пресейв</Label>
+            <Input
+              id="presave_url"
+              type="url"
+              value={formData.presave_url}
+              onChange={(e) => setFormData({ ...formData, presave_url: e.target.value })}
+              placeholder="https://... (Spotify, Apple Music)"
+              className={inputClass}
+            />
           </div>
 
           <div className="space-y-2">
@@ -259,9 +348,7 @@ export default function UploadTrackForm({ onSuccess, isDark = true }) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description" className={labelClass}>
-              Описание
-            </Label>
+            <Label htmlFor="description" className={labelClass}>Описание</Label>
             <Textarea
               id="description"
               value={formData.description}
@@ -270,6 +357,13 @@ export default function UploadTrackForm({ onSuccess, isDark = true }) {
               className={textareaClass}
             />
           </div>
+
+          <p className={cn('text-xs', textMuted)}>
+            Для расширенной формы (BPM, тональность, ISRC и т.д.) используйте{' '}
+            <Link to="/upload" className="underline text-purple-400 hover:text-purple-300">
+              страницу загрузки
+            </Link>.
+          </p>
 
           <Button
             type="submit"

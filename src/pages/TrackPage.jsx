@@ -109,7 +109,7 @@ export default function TrackPage() {
   }
 
   return (
-    <div className="relative min-h-screen p-8 pb-32">
+    <div className="relative min-h-screen p-4 sm:p-6 lg:p-8 pb-32">
       <motion.div
         className={cn('rounded-2xl p-6 mb-8 border', cardBg)}
         initial={{ opacity: 0, y: 20 }}

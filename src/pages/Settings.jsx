@@ -62,13 +62,13 @@ export default function Settings() {
   }
 
   return (
-    <div className="relative min-h-screen p-8 pb-32 max-w-3xl mx-auto">
+    <div className="relative min-h-screen p-4 sm:p-6 lg:p-8 pb-32 max-w-3xl mx-auto">
       <motion.div
-        className="mb-8"
+        className="mb-6 sm:mb-8"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <h1 className={cn('text-4xl font-bold mb-2 flex items-center gap-3', textClass)}>
+        <h1 className={cn('text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 flex items-center gap-3', textClass)}>
           <SettingsIcon className="w-8 h-8" />
           Настройки
         </h1>

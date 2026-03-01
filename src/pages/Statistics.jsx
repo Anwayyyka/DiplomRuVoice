@@ -108,7 +108,7 @@ export default function Statistics() {
   }
 
   return (
-    <div className="relative min-h-screen p-8 pb-32">
+    <div className="relative min-h-screen p-4 sm:p-6 lg:p-8 pb-32">
       <motion.div
         className="mb-8"
         initial={{ opacity: 0, y: -20 }}

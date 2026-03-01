@@ -79,33 +79,68 @@ CREATE TABLE artist_application_documents (
 
 ## 2. Загрузка трека (расширенная форма)
 
-Используются существующие сущности треков и альбомов; при необходимости расширить поля.
-
-### Таблицы (дополнительные поля к существующим)
-
-Для **tracks** (или аналог):
-
-- `title`, `artist_name`, `album_id` (nullable), `release_type` (single/album/ep), `language`, `lyrics`
-- `bpm` INT, `key` VARCHAR(10), `mood` TEXT[] или JSONB, `tags` TEXT[] или VARCHAR(500)
-- `explicit` BOOLEAN, `isrc` VARCHAR(50)
-- `composer`, `author_text`, `copyright_info` TEXT
-- `release_date` DATE, `cover_path`, `audio_path`
-- `status`: draft | pending | approved | rejected
-- `moderator_comment`, `reviewed_at`
-
-Для **albums** (если есть):
-
-- `title`, `artist_id`/artist_name, `type` (single/ep/album), `cover_path`, `status`
-
-Дополнительные авторы (опционально):
+### Таблица tracks (полная структура)
 
 ```sql
+CREATE TABLE tracks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- Основное
+  title VARCHAR(255) NOT NULL,
+  artist_name VARCHAR(255) NOT NULL,
+  album_id UUID REFERENCES albums(id),
+  release_type VARCHAR(20) NOT NULL DEFAULT 'single', -- single | album | ep
+  language VARCHAR(10) DEFAULT 'ru',
+  lyrics TEXT,
+  -- Обложка и аудио
+  cover_path VARCHAR(500),
+  audio_path VARCHAR(500) NOT NULL,
+  -- Авторы
+  author_lyrics VARCHAR(255),   -- автор текста (кто написал слова)
+  author_beat VARCHAR(255),     -- автор бита (продюсер)
+  author_composer VARCHAR(255), -- автор всего / композитор
+  copyright_info TEXT,
+  -- Дата и пресейв
+  release_date DATE,
+  presave_url VARCHAR(500),    -- ссылка на пресейв (Spotify, Apple Music и т.д.)
+  -- Метаданные
+  bpm INT,
+  musical_key VARCHAR(10),
+  mood TEXT[],
+  tags TEXT[],
+  explicit BOOLEAN DEFAULT false,
+  isrc VARCHAR(50),
+  -- Статус
+  status VARCHAR(20) NOT NULL DEFAULT 'draft', -- draft | pending | approved | rejected
+  moderator_comment TEXT,
+  reviewed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Дополнительные участники (сведение, мастеринг и т.д.)
 CREATE TABLE track_credits (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   track_id UUID NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
-  composer VARCHAR(255),
-  author_text VARCHAR(255),
+  role VARCHAR(100),  -- например: сведение, мастеринг
+  name VARCHAR(255),
   sort_order INT DEFAULT 0
+);
+```
+
+### Таблица albums
+
+```sql
+CREATE TABLE albums (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title VARCHAR(255) NOT NULL,
+  artist_name VARCHAR(255),
+  type VARCHAR(20) NOT NULL DEFAULT 'single', -- single | ep | album
+  cover_path VARCHAR(500),
+  status VARCHAR(20) DEFAULT 'draft',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 
@@ -113,18 +148,36 @@ CREATE TABLE track_credits (
 
 | Метод | Путь | Описание |
 |-------|------|----------|
-| GET | `/api/albums/my` или через артиста | Список альбомов текущего артиста (для select). |
+| GET | `/api/albums/my` | Список альбомов текущего артиста (для select). |
 | POST | `/api/albums` | Создать альбом (title, type, cover file). |
-| POST | `/api/tracks` | Загрузка трека (multipart: audio, cover; JSON-поля в форме или отдельно). |
+| POST | `/api/tracks` | Загрузка трека (multipart: audio, cover; JSON или form-data). |
 | PATCH | `/api/tracks/:id` | Обновить черновик. |
 | POST | `/api/tracks/:id/submit` | Отправить на модерацию (status → pending). |
 
-Тело создания трека (часть полей; файлы — multipart):
+### Поля для POST /api/tracks (multipart/form-data)
 
-- Основное: `title`, `artist_name`, `album_id` (или создать новый), `release_type`, `language`, `lyrics`
-- Мета: `bpm`, `key`, `mood[]`, `tags` (строка или массив), `explicit`, `isrc`
-- Авторы: `composer`, `author`, `copyright`, массив дополнительных авторов
-- Файлы: `cover` (file), `audio` (file), `release_date`
+| Поле | Тип | Обязательно | Описание |
+|------|-----|-------------|----------|
+| title | string | да | Название трека |
+| artist_name | string | да | Исполнитель |
+| audio | file | да | Аудиофайл |
+| cover | file | нет | Обложка |
+| release_type | string | да | single / album / ep |
+| album_id | uuid | нет | ID альбома (если не сингл) |
+| lyrics | string | нет | Текст песни |
+| author_lyrics | string | нет | Автор текста |
+| author_beat | string | нет | Автор бита (продюсер) |
+| author_composer | string | нет | Автор всего / композитор |
+| copyright_info | string | нет | Информация об авторских правах |
+| release_date | date | нет | Дата релиза (YYYY-MM-DD) |
+| presave_url | string | нет | Ссылка на пресейв |
+| language | string | нет | ru / en / other |
+| bpm | int | нет | BPM |
+| musical_key | string | нет | Тональность (C, D#, и т.д.) |
+| mood | array | нет | Массив настроений |
+| tags | string/array | нет | Теги (через запятую или массив) |
+| explicit | bool | нет | Содержит ненормативную лексику |
+| isrc | string | нет | ISRC |
 
 ---
 
