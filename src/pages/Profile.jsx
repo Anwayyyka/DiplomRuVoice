@@ -202,14 +202,16 @@ export default function Profile() {
 
                 {user?.bio && <p className={cn('mt-3', textSecondary)}>{user.bio}</p>}
 
-                {/* Become Artist Button */}
-                {user.role === 'user' && (
+                {/* Кнопка «Стать артистом» только для обычного слушателя (не артист, не админ) */}
+                {user.role !== 'artist' && user.role !== 'admin' && (
                   <Button
-                    onClick={() => setShowBecomeArtist(true)}
+                    asChild
                     className="mt-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
                   >
-                    <Star className="w-4 h-4 mr-2" />
-                    Стать артистом
+                    <Link to="/become-artist">
+                      <Star className="w-4 h-4 mr-2" />
+                      Стать артистом
+                    </Link>
                   </Button>
                 )}
 

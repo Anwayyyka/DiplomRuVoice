@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -182,8 +183,8 @@ export default function Settings() {
           </Card>
         </motion.div>
 
-        {/* Стать артистом */}
-        {(user.role === 'user' || user.role === 'admin') && (
+        {/* Стать артистом — только для обычного слушателя (не артист, не админ) */}
+        {user.role !== 'artist' && user.role !== 'admin' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -201,11 +202,13 @@ export default function Settings() {
               </CardHeader>
               <CardContent>
                 <Button
-                  onClick={() => setShowBecomeArtist(true)}
+                  asChild
                   className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
                 >
-                  <Star className="w-4 h-4 mr-2" />
-                  Стать артистом
+                  <Link to="/become-artist">
+                    <Star className="w-4 h-4 mr-2" />
+                    Стать артистом
+                  </Link>
                 </Button>
               </CardContent>
             </Card>

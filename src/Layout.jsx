@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Search, Home, Heart, BarChart3, Sun, Moon, Upload, Shield, LogOut, Mic } from "lucide-react";
+import { Search, Home, Heart, BarChart3, Sun, Moon, Upload, Shield, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import AnimatedBackground from '@/components/ui/AnimatedBackground';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -13,19 +13,16 @@ export default function Layout({ children }) {
   const { isDark, setIsDark } = useTheme();
   const { user, logout } = useAuth();
 
-  // Базовые пункты: главная и поиск всегда; избранное — только для авторизованных
+  // Избранное показываем только авторизованным (проверяем явно по user.id или token)
+  const isLoggedIn = Boolean(user && (user.id != null || user.email));
   const navItems = [
     { name: 'Главная', path: '/', icon: Home },
     { name: 'Поиск', path: '/search', icon: Search },
-    ...(user ? [{ name: 'Любимое', path: '/favorites', icon: Heart }] : []),
+    ...(isLoggedIn ? [{ name: 'Любимое', path: '/favorites', icon: Heart }] : []),
     { name: 'Чарты', path: '/charts', icon: BarChart3 },
   ];
 
-  if (user) {
-    // «Стать артистом» — для пользователей, которые ещё не артисты (как загрузка треков для артистов)
-    if (user.role !== 'artist' && user.role !== 'admin') {
-      navItems.push({ name: 'Стать артистом', path: '/become-artist', icon: Mic });
-    }
+  if (isLoggedIn) {
     if (user.role === 'artist' || user.role === 'admin') {
       navItems.push({ name: 'Загрузить', path: '/upload', icon: Upload });
     }
