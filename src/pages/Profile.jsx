@@ -25,6 +25,12 @@ export default function Profile() {
   const [currentTrack, setCurrentTrack] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({});
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [bannerFile, setBannerFile] = useState(null);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null);
+  const [bannerPreviewUrl, setBannerPreviewUrl] = useState(null);
+  const avatarInputRef = React.useRef(null);
+  const bannerInputRef = React.useRef(null);
   const [showBecomeArtist, setShowBecomeArtist] = useState(false);
   const [artistForm, setArtistForm] = useState({ artist_name: '', bio: '' });
 
@@ -77,6 +83,7 @@ export default function Profile() {
   const startEditing = () => {
     setEditForm({
       full_name: user?.full_name || '',
+      nickname: user?.nickname || '',
       bio: user?.bio || '',
       avatar_url: user?.avatar_url || '',
       banner_url: user?.banner_url || '',
@@ -85,18 +92,80 @@ export default function Profile() {
       youtube: user?.youtube || '',
       website: user?.website || '',
     });
+    setAvatarFile(null);
+    setBannerFile(null);
+    setAvatarPreviewUrl(null);
+    setBannerPreviewUrl(null);
     setIsEditing(true);
   };
 
+  const onAvatarChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
+    setAvatarFile(file);
+    setAvatarPreviewUrl(URL.createObjectURL(file));
+    e.target.value = '';
+  };
+  const onBannerChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    if (bannerPreviewUrl) URL.revokeObjectURL(bannerPreviewUrl);
+    setBannerFile(file);
+    setBannerPreviewUrl(URL.createObjectURL(file));
+    e.target.value = '';
+  };
+  const closeEditDialog = (open) => {
+    if (!open) {
+      if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
+      if (bannerPreviewUrl) URL.revokeObjectURL(bannerPreviewUrl);
+      setAvatarPreviewUrl(null);
+      setBannerPreviewUrl(null);
+      setAvatarFile(null);
+      setBannerFile(null);
+    }
+    setIsEditing(open);
+  };
+
+  const fileToDataUrl = (file) =>
+    new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+
   const saveProfile = async () => {
     try {
-      const updatedUser = await usersAPI.updateProfile(authUser.id, editForm);
+      let updatedUser;
+      if (avatarFile || bannerFile) {
+        try {
+          const formData = new FormData();
+          Object.entries(editForm).forEach(([k, v]) => { if (v != null && v !== '') formData.append(k, String(v)); });
+          if (avatarFile) formData.append('avatar', avatarFile);
+          if (bannerFile) formData.append('banner', bannerFile);
+          updatedUser = await usersAPI.updateProfileWithFiles(authUser.id, formData);
+        } catch (_) {
+          const payload = { ...editForm };
+          if (avatarFile) payload.avatar_url = await fileToDataUrl(avatarFile);
+          if (bannerFile) payload.banner_url = await fileToDataUrl(bannerFile);
+          updatedUser = await usersAPI.updateProfile(authUser.id, payload);
+        }
+      } else {
+        updatedUser = await usersAPI.updateProfile(authUser.id, editForm);
+      }
       setUser(updatedUser);
+      if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
+      if (bannerPreviewUrl) URL.revokeObjectURL(bannerPreviewUrl);
+      setAvatarPreviewUrl(null);
+      setBannerPreviewUrl(null);
+      setAvatarFile(null);
+      setBannerFile(null);
       setIsEditing(false);
       toast.success('Профиль обновлён');
     } catch (error) {
       console.error('Update failed:', error);
-      toast.error('Ошибка при обновлении профиля');
+      toast.error(error.message || 'Ошибка при обновлении профиля');
     }
   };
 
@@ -123,6 +192,9 @@ export default function Profile() {
     ? 'bg-zinc-800/50 backdrop-blur-sm border-zinc-700'
     : 'bg-white/80 backdrop-blur-sm border-gray-200';
   const inputBg = isDark ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-white border-gray-200 text-gray-900';
+  const btnOutline = isDark
+    ? 'border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700 hover:text-white'
+    : '';
 
   if (loading) {
     return (
@@ -155,45 +227,48 @@ export default function Profile() {
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
         </div>
 
-        <div className="max-w-4xl mx-auto px-6 -mt-20 relative z-10 pb-32">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 -mt-16 sm:-mt-20 relative z-10 pb-32">
           {/* Profile Header */}
           <motion.div
-            className={cn('rounded-2xl p-6 mb-6 border', cardBg)}
+            className={cn('rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 border', cardBg)}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <div className="flex items-start gap-6 flex-wrap">
-              <Avatar className="w-28 h-28 ring-4 ring-purple-500/50">
+            <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
+              <Avatar className="w-20 h-20 sm:w-28 sm:h-28 ring-4 ring-purple-500/50 shrink-0">
                 {user?.avatar_url ? <AvatarImage src={user.avatar_url} /> : null}
                 <AvatarFallback className="bg-gradient-to-br from-purple-600 to-pink-600 text-white text-3xl">
-                  {user.full_name?.[0] || user.email?.[0]?.toUpperCase()}
+                  {(user.nickname || user.full_name)?.[0] || user.email?.[0]?.toUpperCase()}
                 </AvatarFallback>
               </Avatar>
 
-              <div className="flex-1">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h1 className={cn('text-2xl font-bold', textClass)}>
-                      {user.full_name || 'Пользователь'}
+              <div className="flex-1 w-full min-w-0">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                  <div className="min-w-0">
+                    <h1 className={cn('text-xl sm:text-2xl font-bold truncate', textClass)}>
+                      {user.nickname || user.full_name || 'Пользователь'}
                     </h1>
+                    {user.nickname && user.full_name && user.nickname !== user.full_name && (
+                      <p className={cn('text-sm', textSecondary)}>{user.full_name}</p>
+                    )}
                     <p className={textSecondary}>{user.email}</p>
                   </div>
-                  <div className="flex gap-2 flex-wrap">
+                  <div className="flex flex-wrap gap-2">
                     {user.role === 'artist' && (
                       <Link to="/statistics">
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="sm" className={btnOutline}>
                           <BarChart3 className="w-4 h-4 mr-2" />
                           Статистика
                         </Button>
                       </Link>
                     )}
                     <Link to="/settings">
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" className={btnOutline}>
                         <Settings className="w-4 h-4 mr-2" />
                         Настройки
                       </Button>
                     </Link>
-                    <Button onClick={startEditing} variant="outline" size="sm">
+                    <Button onClick={startEditing} variant="outline" size="sm" className={btnOutline}>
                       <Edit className="w-4 h-4 mr-2" />
                       Редактировать
                     </Button>
@@ -202,20 +277,22 @@ export default function Profile() {
 
                 {user?.bio && <p className={cn('mt-3', textSecondary)}>{user.bio}</p>}
 
-                {/* Become Artist Button */}
-                {user.role === 'user' && (
+                {/* Кнопка «Стать артистом» только для обычного слушателя (не артист, не админ) */}
+                {user.role !== 'artist' && user.role !== 'admin' && (
                   <Button
-                    onClick={() => setShowBecomeArtist(true)}
+                    asChild
                     className="mt-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
                   >
-                    <Star className="w-4 h-4 mr-2" />
-                    Стать артистом
+                    <Link to="/become-artist">
+                      <Star className="w-4 h-4 mr-2" />
+                      Стать артистом
+                    </Link>
                   </Button>
                 )}
 
                 {/* Stats Cards */}
                 {user.role === 'artist' && (
-                  <div className="grid grid-cols-4 gap-4 mt-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-6">
                     <motion.div
                       className={cn('p-4 rounded-xl text-center border', cardBg)}
                       whileHover={{ scale: 1.02 }}
@@ -302,7 +379,7 @@ export default function Profile() {
 
           {/* Tabs */}
           <Tabs defaultValue={user.role === 'artist' ? 'tracks' : 'liked'} className="w-full">
-            <TabsList className={cn('w-full justify-start mb-6 border', cardBg)}>
+            <TabsList className={cn('w-full justify-start mb-6 border overflow-x-auto flex-nowrap', cardBg)}>
               {user.role === 'artist' && (
                 <>
                   <TabsTrigger value="tracks">Мои треки ({approvedTracks.length})</TabsTrigger>
@@ -419,30 +496,74 @@ export default function Profile() {
       </div>
 
       {/* Edit Profile Dialog */}
-      <Dialog open={isEditing} onOpenChange={setIsEditing}>
+      <Dialog open={isEditing} onOpenChange={closeEditDialog}>
         <DialogContent className={cn('max-w-lg border', cardBg)}>
           <DialogHeader>
             <DialogTitle className={textClass}>Редактировать профиль</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label className={textSecondary}>Аватар (URL)</Label>
+              <Label className={textSecondary}>Ник (отображаемое имя)</Label>
               <Input
-                value={editForm.avatar_url}
-                onChange={(e) => setEditForm({ ...editForm, avatar_url: e.target.value })}
-                placeholder="https://example.com/avatar.jpg"
+                value={editForm.nickname ?? ''}
+                onChange={(e) => setEditForm({ ...editForm, nickname: e.target.value })}
+                placeholder="Ваш ник или псевдоним"
                 className={inputBg}
               />
             </div>
 
             <div className="space-y-2">
-              <Label className={textSecondary}>Баннер (URL)</Label>
-              <Input
-                value={editForm.banner_url}
-                onChange={(e) => setEditForm({ ...editForm, banner_url: e.target.value })}
-                placeholder="https://example.com/banner.jpg"
-                className={inputBg}
+              <Label className={textSecondary}>Аватар</Label>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={onAvatarChange}
               />
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => avatarInputRef.current?.click()}
+                onKeyDown={(e) => e.key === 'Enter' && avatarInputRef.current?.click()}
+                className={cn(
+                  'w-24 h-24 rounded-xl border-2 border-dashed flex items-center justify-center overflow-hidden shrink-0 cursor-pointer transition-opacity hover:opacity-90',
+                  isDark ? 'border-zinc-600 bg-zinc-800' : 'border-gray-300 bg-gray-100'
+                )}
+              >
+                {(avatarPreviewUrl || editForm.avatar_url) ? (
+                  <img src={avatarPreviewUrl || editForm.avatar_url} alt="Аватар" className="w-full h-full object-cover" />
+                ) : (
+                  <span className={cn('text-xs', textSecondary)}>Нажмите, чтобы выбрать фото</span>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className={textSecondary}>Шапка профиля (баннер)</Label>
+              <input
+                ref={bannerInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={onBannerChange}
+              />
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => bannerInputRef.current?.click()}
+                onKeyDown={(e) => e.key === 'Enter' && bannerInputRef.current?.click()}
+                className={cn(
+                  'w-full h-28 rounded-xl border-2 border-dashed flex items-center justify-center overflow-hidden cursor-pointer transition-opacity hover:opacity-90',
+                  isDark ? 'border-zinc-600 bg-zinc-800' : 'border-gray-300 bg-gray-100'
+                )}
+              >
+                {(bannerPreviewUrl || editForm.banner_url) ? (
+                  <img src={bannerPreviewUrl || editForm.banner_url} alt="Шапка" className="w-full h-full object-cover" />
+                ) : (
+                  <span className={cn('text-sm', textSecondary)}>Нажмите, чтобы выбрать изображение</span>
+                )}
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -495,7 +616,7 @@ export default function Profile() {
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setIsEditing(false)}>
+            <Button variant="outline" onClick={() => closeEditDialog(false)}>
               <X className="w-4 h-4 mr-2" />
               Отмена
             </Button>

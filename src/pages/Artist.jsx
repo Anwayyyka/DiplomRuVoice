@@ -137,13 +137,13 @@ export default function Artist() {
         </div>
 
         {/* Artist Info */}
-        <div className="max-w-4xl mx-auto px-6 -mt-24 relative z-10">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 -mt-16 sm:-mt-24 relative z-10">
           <motion.div
             className={cn('rounded-2xl p-6 border', cardBg)}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <div className="flex items-start gap-6">
+            <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
               <Avatar className="w-32 h-32 ring-4 ring-purple-500/50">
                 {artist?.avatar_url ? <AvatarImage src={artist.avatar_url} /> : null}
                 <AvatarFallback className="bg-gradient-to-br from-purple-600 to-pink-600 text-white text-4xl">

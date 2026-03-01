@@ -24,7 +24,7 @@ export const usersAPI = {
     return res.json();
   },
 
-  // Обновить профиль
+  // Обновить профиль (JSON)
   updateProfile: async (userId, data) => {
     const res = await fetch(`${API_BASE}/profile`, {
       method: 'PUT',
@@ -33,6 +33,17 @@ export const usersAPI = {
         ...getAuthHeaders(),
       },
       body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Ошибка обновления профиля');
+    return res.json();
+  },
+
+  // Обновить профиль с загрузкой аватара и/или шапки (multipart/form-data)
+  updateProfileWithFiles: async (userId, formData) => {
+    const res = await fetch(`${API_BASE}/profile`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: formData,
     });
     if (!res.ok) throw new Error('Ошибка обновления профиля');
     return res.json();

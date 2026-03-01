@@ -81,15 +81,15 @@ export default function Home() {
 
   return (
     <div className="relative min-h-screen">
-      <div className="relative z-10 p-8 pb-32">
+      <div className="relative z-10 p-4 sm:p-6 lg:p-8 pb-32">
         {/* Header */}
         <motion.div
-          className="mb-8"
+          className="mb-6 sm:mb-8"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <h1 className={cn('text-4xl font-bold mb-2', textClass)}>Главная</h1>
+          <h1 className={cn('text-2xl sm:text-3xl lg:text-4xl font-bold mb-2', textClass)}>Главная</h1>
           <p className={textSecondary}>Слушайте самые новые релизы</p>
         </motion.div>
 

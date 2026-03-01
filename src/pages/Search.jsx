@@ -95,9 +95,9 @@ export default function Search() {
   }
 
   return (
-    <div className="relative min-h-screen p-8 pb-32">
+    <div className="relative min-h-screen p-4 sm:p-6 lg:p-8 pb-32">
       <motion.div
-        className="relative max-w-2xl mb-8"
+        className="relative max-w-2xl mb-6 sm:mb-8"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
       >
