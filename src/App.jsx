@@ -16,6 +16,9 @@ import Settings from './pages/Settings';
 import Statistics from './pages/Statistics';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import BecomeArtist from './pages/BecomeArtist';
+import UploadTrack from './pages/UploadTrack';
+import MyRequests from './pages/MyRequests';
 
 function App() {
   return (
@@ -37,6 +40,9 @@ function App() {
               <Route path="/statistics" element={<Statistics />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/become-artist" element={<BecomeArtist />} />
+              <Route path="/upload-track" element={<UploadTrack />} />
+              <Route path="/my-requests" element={<MyRequests />} />
               <Route path="*" element={<div>404 Not Found</div>} />
             </Routes>
           </Layout>
