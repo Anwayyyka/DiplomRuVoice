@@ -292,7 +292,7 @@ export default function Profile() {
 
                 {/* Stats Cards */}
                 {user.role === 'artist' && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mt-6">
                     <motion.div
                       className={cn('p-4 rounded-xl text-center border', cardBg)}
                       whileHover={{ scale: 1.02 }}
@@ -316,14 +316,6 @@ export default function Profile() {
                       <Heart className="w-6 h-6 mx-auto mb-2 text-red-500" />
                       <p className={cn('text-2xl font-bold', textClass)}>{totalLikes}</p>
                       <p className={cn('text-xs', textSecondary)}>Лайков</p>
-                    </motion.div>
-                    <motion.div
-                      className={cn('p-4 rounded-xl text-center border', cardBg)}
-                      whileHover={{ scale: 1.02 }}
-                    >
-                      <BarChart3 className="w-6 h-6 mx-auto mb-2 text-green-500" />
-                      <p className={cn('text-2xl font-bold', textClass)}>{likedTracks.length}</p>
-                      <p className={cn('text-xs', textSecondary)}>В избранном</p>
                     </motion.div>
                   </div>
                 )}
@@ -377,241 +369,231 @@ export default function Profile() {
             </div>
           </motion.div>
 
-          {/* Tabs */}
-          <Tabs defaultValue={user.role === 'artist' ? 'tracks' : 'liked'} className="w-full">
-            <TabsList className={cn('w-full justify-start mb-6 border overflow-x-auto flex-nowrap', cardBg)}>
-              {user.role === 'artist' && (
-                <>
-                  <TabsTrigger value="tracks">Мои треки ({approvedTracks.length})</TabsTrigger>
-                  <TabsTrigger value="pending">На модерации ({pendingTracks.length})</TabsTrigger>
-                </>
-              )}
-              <TabsTrigger value="liked">Понравившиеся ({likedTracks.length})</TabsTrigger>
-              {user.role === 'artist' && <TabsTrigger value="stats">Статистика</TabsTrigger>}
-            </TabsList>
+          {/* Tabs — только для артистов, без блока «Понравившиеся» */}
+          {user.role === 'artist' && (
+            <Tabs defaultValue="tracks" className="w-full">
+              <TabsList className={cn('w-full justify-start mb-6 border flex flex-wrap gap-2', cardBg)}>
+                <TabsTrigger value="tracks">Мои треки ({approvedTracks.length})</TabsTrigger>
+                <TabsTrigger value="pending">На модерации ({pendingTracks.length})</TabsTrigger>
+                <TabsTrigger value="stats">Статистика</TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="tracks">
-              {approvedTracks.length === 0 ? (
-                <p className={cn('text-center py-12', textSecondary)}>Нет опубликованных треков</p>
-              ) : (
-                <div className="space-y-2">
-                  {approvedTracks.map((track, index) => (
-                    <TrackRow
-                      key={track.id}
-                      track={track}
-                      onPlay={playTrack}
-                      isDark={isDark}
-                      isPlaying={currentTrack?.id === track.id}
-                      index={index}
-                      showStats
-                    />
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="pending">
-              {pendingTracks.length === 0 ? (
-                <p className={cn('text-center py-12', textSecondary)}>Нет треков на модерации</p>
-              ) : (
-                <div className="space-y-2">
-                  {pendingTracks.map((track, index) => (
-                    <TrackRow
-                      key={track.id}
-                      track={track}
-                      onPlay={playTrack}
-                      isDark={isDark}
-                      isPlaying={currentTrack?.id === track.id}
-                      index={index}
-                    />
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="liked">
-              {likedTracks.length === 0 ? (
-                <p className={cn('text-center py-12', textSecondary)}>Вы ещё не лайкали треки</p>
-              ) : (
-                <div className="space-y-2">
-                  {likedTracks.map((track, index) => (
-                    <TrackRow
-                      key={track.id}
-                      track={track}
-                      onPlay={playTrack}
-                      isDark={isDark}
-                      isPlaying={currentTrack?.id === track.id}
-                      index={index}
-                    />
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="stats">
-              <motion.div
-                className={cn('rounded-xl p-6 border', cardBg)}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-              >
-                <h3 className={cn('text-lg font-bold mb-4', textClass)}>Статистика по трекам</h3>
+              <TabsContent value="tracks">
                 {approvedTracks.length === 0 ? (
-                  <p className={textSecondary}>Загрузите треки, чтобы видеть статистику</p>
+                  <p className={cn('text-center py-12', textSecondary)}>Нет опубликованных треков</p>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-2">
                     {approvedTracks.map((track, index) => (
-                      <motion.div
+                      <TrackRow
                         key={track.id}
-                        className={cn('flex items-center gap-4 p-4 rounded-xl border', cardBg)}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.05 }}
-                      >
-                        <img
-                          src={track.cover_url || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=50&h=50&fit=crop'}
-                          alt={track.title}
-                          className="w-12 h-12 rounded-lg object-cover"
-                        />
-                        <div className="flex-1">
-                          <p className={cn('font-medium', textClass)}>{track.title}</p>
-                        </div>
-                        <div className="flex items-center gap-6">
-                          <div className="text-center">
-                            <p className={cn('font-bold', textClass)}>{track.plays_count || 0}</p>
-                            <p className={cn('text-xs', textSecondary)}>прослушиваний</p>
-                          </div>
-                          <div className="text-center">
-                            <p className={cn('font-bold', textClass)}>{track.likes_count || 0}</p>
-                            <p className={cn('text-xs', textSecondary)}>лайков</p>
-                          </div>
-                        </div>
-                      </motion.div>
+                        track={track}
+                        onPlay={playTrack}
+                        isDark={isDark}
+                        isPlaying={currentTrack?.id === track.id}
+                        index={index}
+                        showStats
+                      />
                     ))}
                   </div>
                 )}
-              </motion.div>
-            </TabsContent>
-          </Tabs>
+              </TabsContent>
+
+              <TabsContent value="pending">
+                {pendingTracks.length === 0 ? (
+                  <p className={cn('text-center py-12', textSecondary)}>Нет треков на модерации</p>
+                ) : (
+                  <div className="space-y-2">
+                    {pendingTracks.map((track, index) => (
+                      <TrackRow
+                        key={track.id}
+                        track={track}
+                        onPlay={playTrack}
+                        isDark={isDark}
+                        isPlaying={currentTrack?.id === track.id}
+                        index={index}
+                      />
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="stats">
+                <motion.div
+                  className={cn('rounded-xl p-6 border', cardBg)}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                >
+                  <h3 className={cn('text-lg font-bold mb-4', textClass)}>Статистика по трекам</h3>
+                  {approvedTracks.length === 0 ? (
+                    <p className={textSecondary}>Загрузите треки, чтобы видеть статистику</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {approvedTracks.map((track, index) => (
+                        <motion.div
+                          key={track.id}
+                          className={cn('flex items-center gap-4 p-4 rounded-xl border', cardBg)}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.05 }}
+                        >
+                          <img
+                            src={track.cover_url || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=50&h=50&fit=crop'}
+                            alt={track.title}
+                            className="w-12 h-12 rounded-lg object-cover"
+                          />
+                          <div className="flex-1">
+                            <p className={cn('font-medium', textClass)}>{track.title}</p>
+                          </div>
+                          <div className="flex items-center gap-6">
+                            <div className="text-center">
+                              <p className={cn('font-bold', textClass)}>{track.plays_count || 0}</p>
+                              <p className={cn('text-xs', textSecondary)}>прослушиваний</p>
+                            </div>
+                            <div className="text-center">
+                              <p className={cn('font-bold', textClass)}>{track.likes_count || 0}</p>
+                              <p className={cn('text-xs', textSecondary)}>лайков</p>
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )}
+                </motion.div>
+              </TabsContent>
+            </Tabs>
+          )}
         </div>
       </div>
 
       {/* Edit Profile Dialog */}
       <Dialog open={isEditing} onOpenChange={closeEditDialog}>
-        <DialogContent className={cn('max-w-lg border', cardBg)}>
+        <DialogContent className={cn('max-w-2xl border', cardBg)}>
           <DialogHeader>
             <DialogTitle className={textClass}>Редактировать профиль</DialogTitle>
+            <p className={cn('text-sm', textSecondary)}>
+              Обновите аватар, шапку профиля, ник и ссылки на свои соцсети.
+            </p>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label className={textSecondary}>Ник (отображаемое имя)</Label>
-              <Input
-                value={editForm.nickname ?? ''}
-                onChange={(e) => setEditForm({ ...editForm, nickname: e.target.value })}
-                placeholder="Ваш ник или псевдоним"
-                className={inputBg}
-              />
+          <div className="space-y-6 py-4">
+            <div className="grid gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)] items-start">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className={textSecondary}>Аватар</Label>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={onAvatarChange}
+                  />
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => avatarInputRef.current?.click()}
+                    onKeyDown={(e) => e.key === 'Enter' && avatarInputRef.current?.click()}
+                    className={cn(
+                      'w-24 h-24 rounded-xl border-2 border-dashed flex items-center justify-center overflow-hidden shrink-0 cursor-pointer transition-opacity hover:opacity-90',
+                      isDark ? 'border-zinc-600 bg-zinc-800' : 'border-gray-300 bg-gray-100'
+                    )}
+                  >
+                    {(avatarPreviewUrl || editForm.avatar_url) ? (
+                      <img src={avatarPreviewUrl || editForm.avatar_url} alt="Аватар" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className={cn('text-xs', textSecondary)}>Нажмите, чтобы выбрать фото</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className={textSecondary}>Шапка профиля (баннер)</Label>
+                  <input
+                    ref={bannerInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={onBannerChange}
+                  />
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => bannerInputRef.current?.click()}
+                    onKeyDown={(e) => e.key === 'Enter' && bannerInputRef.current?.click()}
+                    className={cn(
+                      'w-full h-28 rounded-xl border-2 border-dashed flex items-center justify-center overflow-hidden cursor-pointer transition-opacity hover:opacity-90',
+                      isDark ? 'border-zinc-600 bg-zinc-800' : 'border-gray-300 bg-gray-100'
+                    )}
+                  >
+                    {(bannerPreviewUrl || editForm.banner_url) ? (
+                      <img src={bannerPreviewUrl || editForm.banner_url} alt="Шапка" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className={cn('text-sm', textSecondary)}>Нажмите, чтобы выбрать изображение</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className={textSecondary}>Ник (отображаемое имя)</Label>
+                  <Input
+                    value={editForm.nickname ?? ''}
+                    onChange={(e) => setEditForm({ ...editForm, nickname: e.target.value })}
+                    placeholder="Ваш ник или псевдоним"
+                    className={inputBg}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className={textSecondary}>О себе</Label>
+                  <Textarea
+                    value={editForm.bio}
+                    onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
+                    placeholder="Расскажите о себе..."
+                    className={inputBg}
+                  />
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label className={textSecondary}>Аватар</Label>
-              <input
-                ref={avatarInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={onAvatarChange}
-              />
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => avatarInputRef.current?.click()}
-                onKeyDown={(e) => e.key === 'Enter' && avatarInputRef.current?.click()}
-                className={cn(
-                  'w-24 h-24 rounded-xl border-2 border-dashed flex items-center justify-center overflow-hidden shrink-0 cursor-pointer transition-opacity hover:opacity-90',
-                  isDark ? 'border-zinc-600 bg-zinc-800' : 'border-gray-300 bg-gray-100'
-                )}
-              >
-                {(avatarPreviewUrl || editForm.avatar_url) ? (
-                  <img src={avatarPreviewUrl || editForm.avatar_url} alt="Аватар" className="w-full h-full object-cover" />
-                ) : (
-                  <span className={cn('text-xs', textSecondary)}>Нажмите, чтобы выбрать фото</span>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label className={textSecondary}>Шапка профиля (баннер)</Label>
-              <input
-                ref={bannerInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={onBannerChange}
-              />
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => bannerInputRef.current?.click()}
-                onKeyDown={(e) => e.key === 'Enter' && bannerInputRef.current?.click()}
-                className={cn(
-                  'w-full h-28 rounded-xl border-2 border-dashed flex items-center justify-center overflow-hidden cursor-pointer transition-opacity hover:opacity-90',
-                  isDark ? 'border-zinc-600 bg-zinc-800' : 'border-gray-300 bg-gray-100'
-                )}
-              >
-                {(bannerPreviewUrl || editForm.banner_url) ? (
-                  <img src={bannerPreviewUrl || editForm.banner_url} alt="Шапка" className="w-full h-full object-cover" />
-                ) : (
-                  <span className={cn('text-sm', textSecondary)}>Нажмите, чтобы выбрать изображение</span>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label className={textSecondary}>О себе</Label>
-              <Textarea
-                value={editForm.bio}
-                onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
-                placeholder="Расскажите о себе..."
-                className={inputBg}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className={textSecondary}>Telegram</Label>
-                <Input
-                  value={editForm.telegram}
-                  onChange={(e) => setEditForm({ ...editForm, telegram: e.target.value })}
-                  placeholder="https://t.me/..."
-                  className={inputBg}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className={textSecondary}>VK</Label>
-                <Input
-                  value={editForm.vk}
-                  onChange={(e) => setEditForm({ ...editForm, vk: e.target.value })}
-                  placeholder="https://vk.com/..."
-                  className={inputBg}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className={textSecondary}>YouTube</Label>
-                <Input
-                  value={editForm.youtube}
-                  onChange={(e) => setEditForm({ ...editForm, youtube: e.target.value })}
-                  placeholder="https://youtube.com/..."
-                  className={inputBg}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className={textSecondary}>Сайт</Label>
-                <Input
-                  value={editForm.website}
-                  onChange={(e) => setEditForm({ ...editForm, website: e.target.value })}
-                  placeholder="https://..."
-                  className={inputBg}
-                />
+            <div className="space-y-3">
+              <p className={cn('text-xs uppercase tracking-wide', textSecondary)}>Социальные сети</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className={textSecondary}>Telegram</Label>
+                  <Input
+                    value={editForm.telegram}
+                    onChange={(e) => setEditForm({ ...editForm, telegram: e.target.value })}
+                    placeholder="https://t.me/..."
+                    className={inputBg}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className={textSecondary}>VK</Label>
+                  <Input
+                    value={editForm.vk}
+                    onChange={(e) => setEditForm({ ...editForm, vk: e.target.value })}
+                    placeholder="https://vk.com/..."
+                    className={inputBg}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className={textSecondary}>YouTube</Label>
+                  <Input
+                    value={editForm.youtube}
+                    onChange={(e) => setEditForm({ ...editForm, youtube: e.target.value })}
+                    placeholder="https://youtube.com/..."
+                    className={inputBg}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className={textSecondary}>Сайт</Label>
+                  <Input
+                    value={editForm.website}
+                    onChange={(e) => setEditForm({ ...editForm, website: e.target.value })}
+                    placeholder="https://..."
+                    className={inputBg}
+                  />
+                </div>
               </div>
             </div>
           </div>
