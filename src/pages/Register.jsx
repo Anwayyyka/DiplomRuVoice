@@ -44,7 +44,9 @@ const handleSubmit = async (e) => {
   const cardBg = isDark
     ? 'bg-zinc-800/50 backdrop-blur-sm border-zinc-700'
     : 'bg-white/80 backdrop-blur-sm border-gray-200';
-  const inputBg = isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200';
+  const inputBg = isDark
+    ? 'bg-zinc-900 border-zinc-700 !text-white placeholder:!text-zinc-400'
+    : 'bg-white border-gray-200 text-gray-900 placeholder:text-gray-400';
 
   return (
     <div className="relative min-h-screen flex items-center justify-center p-4">

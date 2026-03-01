@@ -25,6 +25,12 @@ export default function Profile() {
   const [currentTrack, setCurrentTrack] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({});
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [bannerFile, setBannerFile] = useState(null);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null);
+  const [bannerPreviewUrl, setBannerPreviewUrl] = useState(null);
+  const avatarInputRef = React.useRef(null);
+  const bannerInputRef = React.useRef(null);
   const [showBecomeArtist, setShowBecomeArtist] = useState(false);
   const [artistForm, setArtistForm] = useState({ artist_name: '', bio: '' });
 
@@ -77,6 +83,7 @@ export default function Profile() {
   const startEditing = () => {
     setEditForm({
       full_name: user?.full_name || '',
+      nickname: user?.nickname || '',
       bio: user?.bio || '',
       avatar_url: user?.avatar_url || '',
       banner_url: user?.banner_url || '',
@@ -85,18 +92,80 @@ export default function Profile() {
       youtube: user?.youtube || '',
       website: user?.website || '',
     });
+    setAvatarFile(null);
+    setBannerFile(null);
+    setAvatarPreviewUrl(null);
+    setBannerPreviewUrl(null);
     setIsEditing(true);
   };
 
+  const onAvatarChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
+    setAvatarFile(file);
+    setAvatarPreviewUrl(URL.createObjectURL(file));
+    e.target.value = '';
+  };
+  const onBannerChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    if (bannerPreviewUrl) URL.revokeObjectURL(bannerPreviewUrl);
+    setBannerFile(file);
+    setBannerPreviewUrl(URL.createObjectURL(file));
+    e.target.value = '';
+  };
+  const closeEditDialog = (open) => {
+    if (!open) {
+      if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
+      if (bannerPreviewUrl) URL.revokeObjectURL(bannerPreviewUrl);
+      setAvatarPreviewUrl(null);
+      setBannerPreviewUrl(null);
+      setAvatarFile(null);
+      setBannerFile(null);
+    }
+    setIsEditing(open);
+  };
+
+  const fileToDataUrl = (file) =>
+    new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+
   const saveProfile = async () => {
     try {
-      const updatedUser = await usersAPI.updateProfile(authUser.id, editForm);
+      let updatedUser;
+      if (avatarFile || bannerFile) {
+        try {
+          const formData = new FormData();
+          Object.entries(editForm).forEach(([k, v]) => { if (v != null && v !== '') formData.append(k, String(v)); });
+          if (avatarFile) formData.append('avatar', avatarFile);
+          if (bannerFile) formData.append('banner', bannerFile);
+          updatedUser = await usersAPI.updateProfileWithFiles(authUser.id, formData);
+        } catch (_) {
+          const payload = { ...editForm };
+          if (avatarFile) payload.avatar_url = await fileToDataUrl(avatarFile);
+          if (bannerFile) payload.banner_url = await fileToDataUrl(bannerFile);
+          updatedUser = await usersAPI.updateProfile(authUser.id, payload);
+        }
+      } else {
+        updatedUser = await usersAPI.updateProfile(authUser.id, editForm);
+      }
       setUser(updatedUser);
+      if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
+      if (bannerPreviewUrl) URL.revokeObjectURL(bannerPreviewUrl);
+      setAvatarPreviewUrl(null);
+      setBannerPreviewUrl(null);
+      setAvatarFile(null);
+      setBannerFile(null);
       setIsEditing(false);
       toast.success('Профиль обновлён');
     } catch (error) {
       console.error('Update failed:', error);
-      toast.error('Ошибка при обновлении профиля');
+      toast.error(error.message || 'Ошибка при обновлении профиля');
     }
   };
 
@@ -169,7 +238,7 @@ export default function Profile() {
               <Avatar className="w-20 h-20 sm:w-28 sm:h-28 ring-4 ring-purple-500/50 shrink-0">
                 {user?.avatar_url ? <AvatarImage src={user.avatar_url} /> : null}
                 <AvatarFallback className="bg-gradient-to-br from-purple-600 to-pink-600 text-white text-3xl">
-                  {user.full_name?.[0] || user.email?.[0]?.toUpperCase()}
+                  {(user.nickname || user.full_name)?.[0] || user.email?.[0]?.toUpperCase()}
                 </AvatarFallback>
               </Avatar>
 
@@ -177,8 +246,11 @@ export default function Profile() {
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                   <div className="min-w-0">
                     <h1 className={cn('text-xl sm:text-2xl font-bold truncate', textClass)}>
-                      {user.full_name || 'Пользователь'}
+                      {user.nickname || user.full_name || 'Пользователь'}
                     </h1>
+                    {user.nickname && user.full_name && user.nickname !== user.full_name && (
+                      <p className={cn('text-sm', textSecondary)}>{user.full_name}</p>
+                    )}
                     <p className={textSecondary}>{user.email}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -424,30 +496,74 @@ export default function Profile() {
       </div>
 
       {/* Edit Profile Dialog */}
-      <Dialog open={isEditing} onOpenChange={setIsEditing}>
+      <Dialog open={isEditing} onOpenChange={closeEditDialog}>
         <DialogContent className={cn('max-w-lg border', cardBg)}>
           <DialogHeader>
             <DialogTitle className={textClass}>Редактировать профиль</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label className={textSecondary}>Аватар (URL)</Label>
+              <Label className={textSecondary}>Ник (отображаемое имя)</Label>
               <Input
-                value={editForm.avatar_url}
-                onChange={(e) => setEditForm({ ...editForm, avatar_url: e.target.value })}
-                placeholder="https://example.com/avatar.jpg"
+                value={editForm.nickname ?? ''}
+                onChange={(e) => setEditForm({ ...editForm, nickname: e.target.value })}
+                placeholder="Ваш ник или псевдоним"
                 className={inputBg}
               />
             </div>
 
             <div className="space-y-2">
-              <Label className={textSecondary}>Баннер (URL)</Label>
-              <Input
-                value={editForm.banner_url}
-                onChange={(e) => setEditForm({ ...editForm, banner_url: e.target.value })}
-                placeholder="https://example.com/banner.jpg"
-                className={inputBg}
+              <Label className={textSecondary}>Аватар</Label>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={onAvatarChange}
               />
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => avatarInputRef.current?.click()}
+                onKeyDown={(e) => e.key === 'Enter' && avatarInputRef.current?.click()}
+                className={cn(
+                  'w-24 h-24 rounded-xl border-2 border-dashed flex items-center justify-center overflow-hidden shrink-0 cursor-pointer transition-opacity hover:opacity-90',
+                  isDark ? 'border-zinc-600 bg-zinc-800' : 'border-gray-300 bg-gray-100'
+                )}
+              >
+                {(avatarPreviewUrl || editForm.avatar_url) ? (
+                  <img src={avatarPreviewUrl || editForm.avatar_url} alt="Аватар" className="w-full h-full object-cover" />
+                ) : (
+                  <span className={cn('text-xs', textSecondary)}>Нажмите, чтобы выбрать фото</span>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className={textSecondary}>Шапка профиля (баннер)</Label>
+              <input
+                ref={bannerInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={onBannerChange}
+              />
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => bannerInputRef.current?.click()}
+                onKeyDown={(e) => e.key === 'Enter' && bannerInputRef.current?.click()}
+                className={cn(
+                  'w-full h-28 rounded-xl border-2 border-dashed flex items-center justify-center overflow-hidden cursor-pointer transition-opacity hover:opacity-90',
+                  isDark ? 'border-zinc-600 bg-zinc-800' : 'border-gray-300 bg-gray-100'
+                )}
+              >
+                {(bannerPreviewUrl || editForm.banner_url) ? (
+                  <img src={bannerPreviewUrl || editForm.banner_url} alt="Шапка" className="w-full h-full object-cover" />
+                ) : (
+                  <span className={cn('text-sm', textSecondary)}>Нажмите, чтобы выбрать изображение</span>
+                )}
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -500,7 +616,7 @@ export default function Profile() {
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setIsEditing(false)}>
+            <Button variant="outline" onClick={() => closeEditDialog(false)}>
               <X className="w-4 h-4 mr-2" />
               Отмена
             </Button>
