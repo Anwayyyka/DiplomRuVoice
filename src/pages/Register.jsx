@@ -9,6 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { firstError, validateEmail, validatePassword, validatePersonName } from '@/lib/validation';
 
 export default function Register() {
   const { isDark } = useTheme();
@@ -22,6 +23,16 @@ export default function Register() {
 
 const handleSubmit = async (e) => {
   e.preventDefault();
+  const err = firstError(
+    validatePersonName(fullName, 'Имя'),
+    validateEmail(email),
+    validatePassword(password, 8, 'Пароль'),
+    validatePassword(confirmPassword, 8, 'Подтверждение пароля')
+  );
+  if (err) {
+    toast.error(err);
+    return;
+  }
   if (password !== confirmPassword) {
     toast.error('Пароли не совпадают');
     return;

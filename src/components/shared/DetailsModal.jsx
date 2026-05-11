@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { Check, X } from 'lucide-react';
+import { toast } from 'sonner';
 
 /**
  * Модальное окно для детального просмотра заявки/трека/альбома в модерации.
@@ -42,6 +43,13 @@ export default function DetailsModal({
   const contentBg = isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200';
 
   const handleReject = () => {
+    if (showRejectComment) {
+      const t = rejectComment.trim();
+      if (t.length < 5) {
+        toast.error('Укажите причину отклонения (не менее 5 символов)');
+        return;
+      }
+    }
     onReject?.(rejectComment);
     setRejectComment('');
     onOpenChange(false);
@@ -99,7 +107,7 @@ export default function DetailsModal({
             <Button
               variant="outline"
               onClick={showRejectComment ? handleReject : () => { onReject(); onOpenChange(false); }}
-              disabled={showRejectComment && !rejectComment.trim()}
+              disabled={showRejectComment && rejectComment.trim().length < 5}
               className="border-red-500 text-red-500 hover:bg-red-500 hover:text-white"
             >
               <X className="h-4 w-4 mr-2" />

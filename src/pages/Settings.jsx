@@ -15,6 +15,14 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { usersAPI } from '@/api/users';
 import { authAPI } from '@/api/auth';
+import {
+  firstError,
+  validateStageName,
+  validateMinLength,
+  validateOptionalPersonName,
+  validateMaxLength,
+  validateOptionalHttpUrl,
+} from '@/lib/validation';
 
 export default function Settings() {
   const { isDark } = useTheme();
@@ -104,6 +112,19 @@ export default function Settings() {
 
   const saveMyData = async () => {
     if (!user) return;
+    const err = firstError(
+      validateOptionalPersonName(editForm.full_name, 'Имя'),
+      (editForm.nickname || '').trim() ? validateStageName(editForm.nickname, 'Ник') : null,
+      validateMaxLength(editForm.bio || '', 5000, 'О себе'),
+      validateOptionalHttpUrl(editForm.telegram, 'Telegram'),
+      validateOptionalHttpUrl(editForm.vk, 'VK'),
+      validateOptionalHttpUrl(editForm.youtube, 'YouTube'),
+      validateOptionalHttpUrl(editForm.website, 'Сайт')
+    );
+    if (err) {
+      toast.error(err);
+      return;
+    }
     setIsLoading(true);
     try {
       let updated;
@@ -143,6 +164,14 @@ export default function Settings() {
 
   const becomeArtist = async () => {
     if (!user) return;
+    const err = firstError(
+      validateStageName(artistForm.artist_name, 'Имя артиста'),
+      validateMinLength(artistForm.bio || '', 10, 'О себе')
+    );
+    if (err) {
+      toast.error(err);
+      return;
+    }
     setIsLoading(true);
     try {
       await usersAPI.requestArtist(user.id, artistForm);

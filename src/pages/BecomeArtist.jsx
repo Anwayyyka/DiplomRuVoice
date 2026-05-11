@@ -21,6 +21,17 @@ import { AGREEMENT_TEXT } from '@/mocks/agreementText';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/contexts/ThemeContext';
 import { User, FileUp, Share2, FileCheck, CheckCircle } from 'lucide-react';
+import { toast } from 'sonner';
+import {
+  firstError,
+  validateRequired,
+  validateStageName,
+  validateOptionalPersonName,
+  validatePhoneRu,
+  validateDocumentFile,
+  validateOptionalHttpUrl,
+  validateMinLength,
+} from '@/lib/validation';
 
 const STEPS = [
   { label: 'Данные' },
@@ -63,8 +74,56 @@ export default function BecomeArtist({ isDark: isDarkProp }) {
     ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500'
     : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400';
 
+  const validateCurrentStep = () => {
+    if (step === 0) {
+      return firstError(
+        validateStageName(formData.artistName, 'Имя артиста'),
+        validateOptionalPersonName(formData.fullName, 'Полное имя'),
+        validateRequired(formData.country, 'Страна'),
+        formData.city.trim()
+          ? firstError(
+              validateMinLength(formData.city.trim(), 2, 'Город'),
+              /^\d+$/.test(formData.city.trim()) ? 'Город: укажите название города, а не только цифры' : null
+            )
+          : null,
+        validatePhoneRu(formData.phone, 'Телефон')
+      );
+    }
+    if (step === 1) {
+      if (!formData.documents?.length) {
+        return 'Загрузите хотя бы один документ (паспорт или иной файл)';
+      }
+      for (let i = 0; i < formData.documents.length; i++) {
+        const docErr = validateDocumentFile(formData.documents[i], undefined, `Файл ${i + 1}`);
+        if (docErr) return docErr;
+      }
+      return null;
+    }
+    if (step === 2) {
+      const hasSocial = [formData.telegram, formData.vk, formData.youtube, formData.website].some(
+        (s) => String(s || '').trim().length > 0
+      );
+      if (!hasSocial && formData.bio.trim().length < 10) {
+        return 'Укажите хотя бы одну ссылку на соцсеть или напишите биографию (не менее 10 символов)';
+      }
+      return firstError(
+        validateOptionalHttpUrl(formData.telegram, 'Telegram'),
+        validateOptionalHttpUrl(formData.vk, 'VK'),
+        validateOptionalHttpUrl(formData.youtube, 'YouTube'),
+        validateOptionalHttpUrl(formData.website, 'Сайт')
+      );
+    }
+    return null;
+  };
+
   const handleNext = () => {
     setError(null);
+    const stepErr = validateCurrentStep();
+    if (stepErr) {
+      setError(stepErr);
+      toast.error(stepErr);
+      return;
+    }
     if (step < 3) setStep((s) => s + 1);
   };
 
@@ -74,8 +133,16 @@ export default function BecomeArtist({ isDark: isDarkProp }) {
   };
 
   const handleSubmit = () => {
+    const stepErr = validateCurrentStep();
+    if (stepErr) {
+      setError(stepErr);
+      toast.error(stepErr);
+      return;
+    }
     if (!agreementAccepted) {
-      setError('Необходимо принять условия соглашения');
+      const msg = 'Необходимо принять условия соглашения';
+      setError(msg);
+      toast.error(msg);
       return;
     }
     setLoading(true);
@@ -164,7 +231,7 @@ export default function BecomeArtist({ isDark: isDarkProp }) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className={labelClass}>Страна</Label>
+                  <Label className={labelClass}>Страна *</Label>
                   <Select
                     value={formData.country}
                     onValueChange={(v) => setFormData({ ...formData, country: v })}
@@ -190,7 +257,7 @@ export default function BecomeArtist({ isDark: isDarkProp }) {
                   />
                 </div>
                 <div className="sm:col-span-2 space-y-2">
-                  <Label htmlFor="phone" className={labelClass}>Телефон</Label>
+                  <Label htmlFor="phone" className={labelClass}>Телефон *</Label>
                   <Input
                     id="phone"
                     type="tel"

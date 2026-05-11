@@ -18,6 +18,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { tracksAPI } from '@/api/tracks';
 import { authAPI } from '@/api/auth';
 import { usersAPI } from '@/api/users';
+import {
+  firstError,
+  validateStageName,
+  validateMinLength,
+  validateMaxLength,
+  validateOptionalHttpUrl,
+} from '@/lib/validation';
 
 export default function Profile() {
   const { isDark } = useTheme();
@@ -136,6 +143,18 @@ export default function Profile() {
     });
 
   const saveProfile = async () => {
+    const err = firstError(
+      (editForm.nickname || '').trim() ? validateStageName(editForm.nickname, 'Ник') : null,
+      validateMaxLength(editForm.bio || '', 5000, 'О себе'),
+      validateOptionalHttpUrl(editForm.telegram, 'Telegram'),
+      validateOptionalHttpUrl(editForm.vk, 'VK'),
+      validateOptionalHttpUrl(editForm.youtube, 'YouTube'),
+      validateOptionalHttpUrl(editForm.website, 'Сайт')
+    );
+    if (err) {
+      toast.error(err);
+      return;
+    }
     try {
       let updatedUser;
       if (avatarFile || bannerFile) {
@@ -170,6 +189,14 @@ export default function Profile() {
   };
 
   const becomeArtist = async () => {
+    const err = firstError(
+      validateStageName(artistForm.artist_name, 'Имя артиста'),
+      validateMinLength(artistForm.bio || '', 10, 'О себе')
+    );
+    if (err) {
+      toast.error(err);
+      return;
+    }
     try {
       const updatedUser = await usersAPI.requestArtist(authUser.id, artistForm);
       setUser(updatedUser);

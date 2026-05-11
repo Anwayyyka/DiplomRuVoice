@@ -15,6 +15,7 @@ import { tracksAPI } from '@/api/tracks';
 import { commentsAPI } from '@/api/comments';
 import { likesAPI } from '@/api/likes';
 import { toast } from 'sonner';
+import { firstError, validateRequired, validateMaxLength } from '@/lib/validation';
 
 export default function TrackPage() {
   const { isDark } = useTheme();
@@ -84,7 +85,15 @@ export default function TrackPage() {
   };
 
   const addComment = async () => {
-    if (!user || !newComment.trim() || !track) return;
+    if (!user || !track) return;
+    const err = firstError(
+      validateRequired(newComment, 'Комментарий'),
+      validateMaxLength(newComment, 2000, 'Комментарий')
+    );
+    if (err) {
+      toast.error(err);
+      return;
+    }
     try {
       const comment = await commentsAPI.addComment(user.id, track.id, newComment);
       setComments(prev => [comment, ...prev]);

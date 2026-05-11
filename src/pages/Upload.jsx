@@ -34,6 +34,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { tracksAPI } from '@/api/tracks';
 import { toast } from 'sonner';
 import { RELEASE_TYPES } from '@/mocks/uploadFormData';
+import {
+  firstError,
+  validateRequired,
+  validateStageName,
+  validateImageFile,
+  validateAudioFile,
+  validateOptionalHttpUrl,
+} from '@/lib/validation';
 
 const statusConfig = {
   pending: { label: 'На модерации', icon: Clock, color: 'bg-yellow-500/20 text-yellow-500' },
@@ -124,6 +132,12 @@ export default function Upload() {
   const handleSingleCover = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const err = validateImageFile(file, undefined, 'Обложка');
+    if (err) {
+      toast.error(err);
+      e.target.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onloadend = () => setSingleForm((f) => ({ ...f, coverPreview: reader.result, coverFile: file }));
     reader.readAsDataURL(file);
@@ -132,6 +146,12 @@ export default function Upload() {
   const handleAlbumCover = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const err = validateImageFile(file, undefined, 'Обложка альбома');
+    if (err) {
+      toast.error(err);
+      e.target.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onloadend = () => {
       setAlbumCover(file);
@@ -161,7 +181,41 @@ export default function Upload() {
     });
   };
 
+  const validateUploadForm = () => {
+    if (releaseType === 'single') {
+      return firstError(
+        validateImageFile(singleForm.coverFile, undefined, 'Обложка'),
+        validateRequired(singleForm.title, 'Название трека'),
+        validateStageName(singleForm.artistName, 'Исполнитель'),
+        validateOptionalHttpUrl(singleForm.presaveUrl, 'Пресейв'),
+        validateAudioFile(singleForm.audioFile, undefined, 'Аудиофайл')
+      );
+    }
+    if (releaseType === 'album' || releaseType === 'ep') {
+      let err = firstError(
+        validateRequired(albumName, 'Название альбома'),
+        validateImageFile(albumCover, undefined, 'Обложка альбома'),
+        validateOptionalHttpUrl(albumPresaveUrl, 'Пресейв альбома')
+      );
+      if (err) return err;
+      for (let i = 0; i < albumTracks.length; i++) {
+        const t = albumTracks[i];
+        err = firstError(
+          validateRequired(t.title, `Название трека ${i + 1}`),
+          validateAudioFile(t.audioFile, undefined, `Аудио трека ${i + 1}`)
+        );
+        if (err) return err;
+      }
+    }
+    return null;
+  };
+
   const handleSubmit = async () => {
+    const validationError = validateUploadForm();
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
     setLoading(true);
     // Имитация отправки (заглушка)
     setTimeout(() => {

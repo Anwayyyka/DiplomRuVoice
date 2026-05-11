@@ -9,6 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { firstError, validateEmail, validatePassword } from '@/lib/validation';
 
 export default function Login() {
   const { isDark } = useTheme();
@@ -20,6 +21,11 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const err = firstError(validateEmail(email), validatePassword(password, 1, 'Пароль'));
+    if (err) {
+      toast.error(err);
+      return;
+    }
     setIsLoading(true);
     try {
       await login(email, password);
