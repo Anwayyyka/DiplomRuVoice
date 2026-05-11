@@ -21,10 +21,10 @@ import { usersAPI } from '@/api/users';
 import {
   firstError,
   validateStageName,
-  validateMinLength,
   validateMaxLength,
   validateOptionalHttpUrl,
 } from '@/lib/validation';
+import { normalizeArtistRequestPayload, isPendingArtistRequest } from '@/lib/artistRequestStatus';
 
 export default function Profile() {
   const { isDark } = useTheme();
@@ -38,9 +38,7 @@ export default function Profile() {
   const [bannerPreviewUrl, setBannerPreviewUrl] = useState(null);
   const avatarInputRef = React.useRef(null);
   const bannerInputRef = React.useRef(null);
-  const [showBecomeArtist, setShowBecomeArtist] = useState(false);
-  const [artistForm, setArtistForm] = useState({ artist_name: '', bio: '' });
-
+  const [artistRequest, setArtistRequest] = useState(null);
   const [user, setUser] = useState(null);
   const [myTracks, setMyTracks] = useState([]);
   const [userLikes, setUserLikes] = useState([]);
@@ -54,6 +52,10 @@ export default function Profile() {
       const userData = await authAPI.getProfile();
       setUser(userData);
 
+      // Загружаем статус заявки артиста
+      const request = await usersAPI.getMyArtistRequest().catch(() => null);
+      setArtistRequest(normalizeArtistRequestPayload(request) || request);
+
       if (userData.role === 'artist') {
         const tracks = await tracksAPI.getArtistTracks(userData.id);
         setMyTracks(Array.isArray(tracks) ? tracks : []);
@@ -63,7 +65,6 @@ export default function Profile() {
 
       const approvedTracks = await tracksAPI.getApprovedTracks();
       setAllTracks(Array.isArray(approvedTracks) ? approvedTracks : []);
-
     } catch (error) {
       console.error('Failed to load profile data:', error);
       toast.error('Не удалось загрузить данные профиля');
@@ -188,27 +189,6 @@ export default function Profile() {
     }
   };
 
-  const becomeArtist = async () => {
-    const err = firstError(
-      validateStageName(artistForm.artist_name, 'Имя артиста'),
-      validateMinLength(artistForm.bio || '', 10, 'О себе')
-    );
-    if (err) {
-      toast.error(err);
-      return;
-    }
-    try {
-      const updatedUser = await usersAPI.requestArtist(authUser.id, artistForm);
-      setUser(updatedUser);
-      setShowBecomeArtist(false);
-      toast.success('Поздравляем! Теперь вы артист');
-      window.location.reload(); // временно, чтобы обновить данные в Layout
-    } catch (error) {
-      console.error('Artist request failed:', error);
-      toast.error('Ошибка при запросе статуса артиста');
-    }
-  };
-
   const playTrack = (track) => {
     setCurrentTrack(track);
   };
@@ -304,17 +284,23 @@ export default function Profile() {
 
                 {user?.bio && <p className={cn('mt-3', textSecondary)}>{user.bio}</p>}
 
-                {/* Кнопка «Стать артистом» только для обычного слушателя (не артист, не админ) */}
+                {/* Кнопка «Стать артистом» с учётом статуса заявки */}
                 {user.role !== 'artist' && user.role !== 'admin' && (
-                  <Button
-                    asChild
-                    className="mt-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-                  >
-                    <Link to="/become-artist">
-                      <Star className="w-4 h-4 mr-2" />
-                      Стать артистом
-                    </Link>
-                  </Button>
+                  isPendingArtistRequest(artistRequest) ? (
+                    <Button disabled className="mt-4 bg-gray-500">
+                      Заявка на рассмотрении
+                    </Button>
+                  ) : (
+                    <Button
+                      asChild
+                      className="mt-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                    >
+                      <Link to="/become-artist">
+                        <Star className="w-4 h-4 mr-2" />
+                        Стать артистом
+                      </Link>
+                    </Button>
+                  )
                 )}
 
                 {/* Stats Cards */}
@@ -396,7 +382,7 @@ export default function Profile() {
             </div>
           </motion.div>
 
-          {/* Tabs — только для артистов, без блока «Понравившиеся» */}
+          {/* Tabs — только для артистов */}
           {user.role === 'artist' && (
             <Tabs defaultValue="tracks" className="w-full">
               <TabsList className={cn('w-full justify-start mb-6 border flex flex-wrap gap-2', cardBg)}>
@@ -632,54 +618,6 @@ export default function Profile() {
             <Button onClick={saveProfile} className="bg-purple-600 hover:bg-purple-700">
               <Save className="w-4 h-4 mr-2" />
               Сохранить
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Become Artist Dialog */}
-      <Dialog open={showBecomeArtist} onOpenChange={setShowBecomeArtist}>
-        <DialogContent className={cn('max-w-lg border', cardBg)}>
-          <DialogHeader>
-            <DialogTitle className={textClass}>Стать артистом</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label className={textSecondary}>Имя артиста</Label>
-              <Input
-                value={artistForm.artist_name}
-                onChange={(e) => setArtistForm({ ...artistForm, artist_name: e.target.value })}
-                placeholder="Под каким именем вы будете публиковать треки?"
-                className={inputBg}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className={textSecondary}>О себе</Label>
-              <Textarea
-                value={artistForm.bio}
-                onChange={(e) => setArtistForm({ ...artistForm, bio: e.target.value })}
-                placeholder="Расскажите о своем творчестве..."
-                className={inputBg}
-              />
-            </div>
-            <div className={cn('p-4 rounded-lg', isDark ? 'bg-purple-900/20' : 'bg-purple-100')}>
-              <p className={cn('text-sm', textSecondary)}>
-                После становления артистом вы сможете загружать треки, просматривать статистику и зарабатывать на прослушиваниях.
-              </p>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setShowBecomeArtist(false)}>
-              <X className="w-4 h-4 mr-2" />
-              Отмена
-            </Button>
-            <Button
-              onClick={becomeArtist}
-              disabled={!artistForm.artist_name.trim()}
-              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-            >
-              <Star className="w-4 h-4 mr-2" />
-              Стать артистом
             </Button>
           </div>
         </DialogContent>

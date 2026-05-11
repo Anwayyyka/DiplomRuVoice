@@ -1,3 +1,5 @@
+import { normalizeArtistRequestPayload } from '@/lib/artistRequestStatus';
+
 const API_BASE = '/api';
 
 const getAuthHeaders = () => {
@@ -49,9 +51,26 @@ export const usersAPI = {
     return res.json();
   },
 
-  // Запрос на становление артистом
-  requestArtist: async (userId, data) => {
-    const res = await fetch(`${API_BASE}/profile/artist-request`, {
+  // Получить текущую заявку пользователя на статус артиста
+  getMyArtistRequest: async () => {
+    const res = await fetch(`${API_BASE}/users/me/artist-request`, {
+      headers: getAuthHeaders(),
+    });
+    if (res.status === 404 || res.status === 204) return null;
+    // Нет/неверный токен — не считаем это «ошибкой заявки», чтобы фронт мог показать форму и понятную ошибку при POST
+    if (res.status === 401 || res.status === 403) return null;
+    if (!res.ok) throw new Error('Ошибка получения заявки');
+    const body = await res.json().catch(() => null);
+    if (body == null) return null;
+    if (Array.isArray(body) && body.length > 0) {
+      return normalizeArtistRequestPayload(body[0]) || body[0];
+    }
+    return normalizeArtistRequestPayload(body) || body;
+  },
+
+  // Отправить заявку на статус артиста (одна активная заявка; повтор — 409)
+  submitArtistRequest: async (data) => {
+    const res = await fetch(`${API_BASE}/users/me/artist-request`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -63,9 +82,39 @@ export const usersAPI = {
       }),
     });
     if (!res.ok) {
-      const error = await res.json().catch(() => ({}));
-      throw new Error(error.message || 'Ошибка запроса');
+      let errorMessage = 'Ошибка отправки заявки';
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const errorData = await res.json().catch(() => ({}));
+        errorMessage = errorData.message || errorData.error || errorMessage;
+      } else {
+        errorMessage = (await res.text()) || errorMessage;
+      }
+      if (res.status === 401 || res.status === 403) {
+        throw new Error(
+          /unauthor/i.test(errorMessage)
+            ? 'Сессия недействительна. Выйдите из аккаунта и войдите снова.'
+            : 'Требуется авторизация. Проверьте, что вы вошли в аккаунт.'
+        );
+      }
+      const duplicate =
+        res.status === 409 ||
+        /уже\s+отправ|already\s+exist|duplicate|заявк.*существ|conflict/i.test(errorMessage);
+      if (duplicate) {
+        throw new Error(
+          errorMessage && /уже|exist|duplicate|заявк|conflict/i.test(errorMessage)
+            ? errorMessage
+            : 'Вы уже отправили заявку на модерацию. Дождитесь решения модератора.'
+        );
+      }
+      throw new Error(errorMessage);
     }
-    return res.json();
+    const body = await res.json().catch(() => ({}));
+    return normalizeArtistRequestPayload(body) || body;
+  },
+
+  // Устаревший метод, оставлен для совместимости
+  requestArtist: async (_userId, data) => {
+    return usersAPI.submitArtistRequest(data);
   },
 };

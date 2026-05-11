@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,10 @@ import { COUNTRIES } from '@/mocks/countries';
 import { AGREEMENT_TEXT } from '@/mocks/agreementText';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/contexts/ThemeContext';
-import { User, FileUp, Share2, FileCheck, CheckCircle } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { normalizeArtistRequestPayload, isPendingArtistRequest } from '@/lib/artistRequestStatus';
+import { usersAPI } from '@/api/users';
+import { User, FileUp, Share2, FileCheck, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   firstError,
@@ -45,12 +48,18 @@ const MAX_BIO_LENGTH = 500;
 export default function BecomeArtist({ isDark: isDarkProp }) {
   const { isDark: isDarkContext } = useTheme();
   const isDark = isDarkProp ?? isDarkContext ?? true;
+  const { user, refreshUser } = useAuth();
 
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [agreementAccepted, setAgreementAccepted] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  // Состояние для проверки существующей заявки
+  const [existingRequest, setExistingRequest] = useState(null);
+  const [checking, setChecking] = useState(true);
+  const submitInFlightRef = useRef(false);
 
   const [formData, setFormData] = useState({
     artistName: '',
@@ -65,6 +74,25 @@ export default function BecomeArtist({ isDark: isDarkProp }) {
     website: '',
     bio: '',
   });
+
+  // Проверяем, есть ли уже заявка
+  useEffect(() => {
+    const checkRequest = async () => {
+      if (!user) {  // Если пользователь не авторизован, не делаем запрос
+        setChecking(false);
+        return;
+      }
+      try {
+        const req = await usersAPI.getMyArtistRequest();
+        setExistingRequest(req ? normalizeArtistRequestPayload(req) || req : null);
+      } catch (err) {
+        console.error('Failed to check artist request:', err);
+      } finally {
+        setChecking(false);
+      }
+    };
+    checkRequest();
+  }, [user]);
 
   const textClass = isDark ? 'text-white' : 'text-gray-900';
   const textSecondary = isDark ? 'text-zinc-400' : 'text-gray-600';
@@ -132,7 +160,7 @@ export default function BecomeArtist({ isDark: isDarkProp }) {
     if (step > 0) setStep((s) => s - 1);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const stepErr = validateCurrentStep();
     if (stepErr) {
       setError(stepErr);
@@ -145,19 +173,157 @@ export default function BecomeArtist({ isDark: isDarkProp }) {
       toast.error(msg);
       return;
     }
+    if (submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
     setLoading(true);
     setError(null);
-    // Имитация отправки
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const latest = await usersAPI.getMyArtistRequest().catch(() => null);
+      const normalizedLatest = normalizeArtistRequestPayload(latest) || latest;
+      if (isPendingArtistRequest(normalizedLatest)) {
+        setExistingRequest(normalizedLatest);
+        const msg =
+          'Вы уже отправили заявку на модерацию. Дождитесь решения модератора.';
+        setError(msg);
+        toast.error(msg);
+        return;
+      }
+
+      const created = await usersAPI.submitArtistRequest({
+        artist_name: formData.artistName,
+        bio: formData.bio,
+      });
+      const saved = normalizeArtistRequestPayload(created) || created;
+      setExistingRequest(
+        saved && saved.status
+          ? saved
+          : { status: 'pending', id: saved?.id, artist_name: formData.artistName }
+      );
+      if (refreshUser) await refreshUser();
       setSubmitted(true);
       setStep(4);
-    }, 1200);
+      toast.success('Заявка отправлена модератору на рассмотрение');
+    } catch (err) {
+      const message = err.message || 'Ошибка при отправке заявки';
+      const duplicate =
+        /уже\s+отправ|дождитесь\s+решени|на\s+модераци|duplicate|conflict|заявк.*существ/i.test(
+          message
+        );
+      if (duplicate) {
+        setExistingRequest({ status: 'pending' });
+      }
+      setError(message);
+      toast.error(message);
+    } finally {
+      submitInFlightRef.current = false;
+      setLoading(false);
+    }
   };
 
   const handleDocumentsChange = (files) => {
     setFormData((prev) => ({ ...prev, documents: files }));
   };
+
+  // Пока проверяем заявку
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500" />
+      </div>
+    );
+  }
+
+  // Уже артист / админ — отдельная подсказка
+  if (!checking && user && (user.role === 'artist' || user.role === 'admin')) {
+    return (
+      <div className="min-h-screen p-4 flex items-center justify-center">
+        <Card className={cn('max-w-md w-full text-center', cardBg)}>
+          <CardContent className="pt-8 pb-8">
+            <CheckCircle className="w-16 h-16 mx-auto text-green-500 mb-4" />
+            <h2 className={cn('text-xl font-semibold mb-2', textClass)}>У вас уже есть статус артиста</h2>
+            <p className={textSecondary}>Загружайте треки и управляйте контентом из профиля.</p>
+            <Button asChild className="mt-6">
+              <Link to="/profile">Перейти в профиль</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Если заявка уже на рассмотрении
+  if (existingRequest && isPendingArtistRequest(existingRequest)) {
+    return (
+      <div className="min-h-screen p-4 flex items-center justify-center">
+        <Card className={cn('max-w-md w-full text-center', cardBg)}>
+          <CardContent className="pt-8 pb-8">
+            <AlertCircle className="w-16 h-16 mx-auto text-yellow-500 mb-4" />
+            <h2 className={cn('text-xl font-semibold mb-2', textClass)}>
+              Ваша заявка уже на модерации
+            </h2>
+            <p className={textSecondary}>
+              Мы рассмотрим её в ближайшее время. Статус заявки: <strong>на рассмотрении</strong>.
+            </p>
+            <Button asChild className="mt-6">
+              <Link to="/profile">Вернуться в профиль</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Заявка в БД одобрена (роль ещё могла не обновиться в сессии)
+  if (existingRequest && String(existingRequest.status || '').toLowerCase() === 'approved') {
+    return (
+      <div className="min-h-screen p-4 flex items-center justify-center">
+        <Card className={cn('max-w-md w-full text-center', cardBg)}>
+          <CardContent className="pt-8 pb-8">
+            <CheckCircle className="w-16 h-16 mx-auto text-green-500 mb-4" />
+            <h2 className={cn('text-xl font-semibold mb-2', textClass)}>
+              Вы уже являетесь артистом
+            </h2>
+            <p className={textSecondary}>
+              Ваша заявка была одобрена. Теперь вы можете загружать треки.
+            </p>
+            <Button asChild className="mt-6">
+              <Link to="/profile">Перейти в профиль</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Заявка отклонена — можно подать снова
+  if (existingRequest && String(existingRequest.status || '').toLowerCase() === 'rejected') {
+    return (
+      <div className="min-h-screen p-4 flex items-center justify-center">
+        <Card className={cn('max-w-md w-full text-center', cardBg)}>
+          <CardContent className="pt-8 pb-8">
+            <AlertCircle className="w-16 h-16 mx-auto text-red-500 mb-4" />
+            <h2 className={cn('text-xl font-semibold mb-2', textClass)}>
+              Заявка отклонена
+            </h2>
+            {existingRequest.moderator_comment && (
+              <p className={textSecondary}>
+                Причина: {existingRequest.moderator_comment}
+              </p>
+            )}
+            <p className={cn('mt-4 text-sm', textSecondary)}>
+              Вы можете подать новую заявку, исправив замечания.
+            </p>
+            <Button
+              onClick={() => setExistingRequest(null)}
+              className="mt-6 bg-gradient-to-r from-purple-600 to-pink-600"
+            >
+              Подать заявку заново
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   // Шаг 5: Успех (после отправки)
   if (submitted && step === 4) {
@@ -183,6 +349,7 @@ export default function BecomeArtist({ isDark: isDarkProp }) {
     );
   }
 
+  // Основная форма (если нет заявки или она была отклонена и сброшена)
   return (
     <div className="relative min-h-screen p-4 py-8">
       <div className="max-w-2xl mx-auto">

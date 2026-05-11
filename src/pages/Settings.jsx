@@ -23,10 +23,11 @@ import {
   validateMaxLength,
   validateOptionalHttpUrl,
 } from '@/lib/validation';
+import { normalizeArtistRequestPayload, isPendingArtistRequest } from '@/lib/artistRequestStatus';
 
 export default function Settings() {
   const { isDark } = useTheme();
-  const { user, logout, setUser: setAuthUser } = useAuth();
+  const { user, logout, setUser: setAuthUser, refreshUser } = useAuth();
   const [notifications, setNotifications] = useState(true);
   const [privacyProfile, setPrivacyProfile] = useState(true);
   const [privacyFavorites, setPrivacyFavorites] = useState(true);
@@ -174,14 +175,22 @@ export default function Settings() {
     }
     setIsLoading(true);
     try {
-      await usersAPI.requestArtist(user.id, artistForm);
-      toast.success('Поздравляем! Теперь вы артист');
+      const existing = await usersAPI.getMyArtistRequest().catch(() => null);
+      const normalized = normalizeArtistRequestPayload(existing) || existing;
+      if (isPendingArtistRequest(normalized)) {
+        toast.error(
+          'Вы уже отправили заявку на модерацию. Дождитесь решения модератора.'
+        );
+        return;
+      }
+      await usersAPI.submitArtistRequest(artistForm);
+      toast.success('Заявка отправлена модератору на рассмотрение');
       setShowBecomeArtist(false);
-      // Временно перезагружаем страницу, чтобы обновить данные пользователя в Layout
-      window.location.reload();
+      setArtistForm({ artist_name: '', bio: '' });
+      if (refreshUser) await refreshUser();
     } catch (error) {
       console.error('Artist request failed:', error);
-      toast.error(error.message || 'Ошибка при запросе статуса артиста');
+      toast.error(error.message || 'Ошибка при отправке заявки');
     } finally {
       setIsLoading(false);
     }

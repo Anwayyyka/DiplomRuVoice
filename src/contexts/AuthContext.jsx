@@ -1,7 +1,8 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../api/auth';
 import { toast } from 'sonner';
+import { readAuthTokenFromResponse } from '@/lib/authToken';
 
 const AuthContext = createContext();
 
@@ -27,13 +28,18 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       const data = await authAPI.login({ email, password });
-      localStorage.setItem('token', data.token);
-      setUser(data.user);
+      const token = readAuthTokenFromResponse(data);
+      if (!token) {
+        const err = new Error('Сервер не вернул токен авторизации');
+        toast.error(err.message);
+        throw err;
+      }
+      localStorage.setItem('token', token);
+      setUser(data.user ?? data);
       toast.success('Вы успешно вошли!');
       navigate('/');
       return data;
     } catch (error) {
-      // Ошибку пробрасываем в компонент, чтобы он показал тост
       throw error;
     }
   };
@@ -41,13 +47,18 @@ export const AuthProvider = ({ children }) => {
   const register = async (email, password, fullName) => {
     try {
       const data = await authAPI.register(email, password, fullName);
-      localStorage.setItem('token', data.token);
-      setUser(data.user);
+      const token = readAuthTokenFromResponse(data);
+      if (!token) {
+        const err = new Error('Сервер не вернул токен авторизации');
+        toast.error(err.message);
+        throw err;
+      }
+      localStorage.setItem('token', token);
+      setUser(data.user ?? data);
       toast.success('Регистрация прошла успешно!');
       navigate('/');
       return data;
     } catch (error) {
-      // Ошибку пробрасываем в компонент
       throw error;
     }
   };
@@ -59,8 +70,20 @@ export const AuthProvider = ({ children }) => {
     navigate('/login');
   };
 
+  const refreshUser = useCallback(async () => {
+    if (!localStorage.getItem('token')) return;
+    try {
+      const userData = await authAPI.getProfile();
+      setUser(userData);
+      return userData;
+    } catch (err) {
+      console.error('Failed to refresh user', err);
+      return null;
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, setUser, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, setUser, loading, login, register, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
