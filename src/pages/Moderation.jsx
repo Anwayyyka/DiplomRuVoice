@@ -184,7 +184,7 @@ export default function Moderation() {
         <Tabs defaultValue="artists" className="w-full">
           <TabsList
             className={cn(
-              'grid w-full grid-cols-3 mb-4 overflow-x-auto',
+              'grid w-full grid-cols-3 mb-4',
               isDark ? 'bg-zinc-800' : 'bg-gray-100'
             )}
           >

@@ -84,3 +84,7 @@
     @apply text-foreground; /* фон убран, чтобы анимированный фон был виден */
   }
 }
+/* в index.css */
+svg {
+  overflow: visible;
+}

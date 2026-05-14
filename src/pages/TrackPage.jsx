@@ -11,15 +11,19 @@ import { ru } from 'date-fns/locale';
 import AudioPlayer from '../components/player/AudioPlayer';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useFavorites } from '../contexts/FavoritesContext';
 import { tracksAPI } from '@/api/tracks';
 import { commentsAPI } from '@/api/comments';
 import { likesAPI } from '@/api/likes';
+import { advanceInPlaylist, isSameTrack } from '@/lib/playback';
 import { toast } from 'sonner';
 import { firstError, validateRequired, validateMaxLength } from '@/lib/validation';
+import { getTrackCoverUrl } from '@/lib/mediaUrl';
 
 export default function TrackPage() {
   const { isDark } = useTheme();
   const { user } = useAuth();
+  const { isFavorite, addFavorite, removeFavorite, reloadFavorites } = useFavorites();
   const [searchParams] = useSearchParams();
   const trackId = searchParams.get('id');
 
@@ -28,7 +32,10 @@ export default function TrackPage() {
   const [likes, setLikes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentTrack, setCurrentTrack] = useState(null);
+  const [playbackToggle, setPlaybackToggle] = useState(0);
+  const [playerUiPlaying, setPlayerUiPlaying] = useState(false);
   const [newComment, setNewComment] = useState('');
+  const [browseQueue, setBrowseQueue] = useState([]);
 
   const fetchData = useCallback(async () => {
     if (!trackId) return;
@@ -51,12 +58,33 @@ export default function TrackPage() {
   }, [trackId]);
 
   useEffect(() => {
+    reloadFavorites();
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, reloadFavorites]);
+
+  useEffect(() => {
+    let cancelled = false;
+    tracksAPI
+      .getApprovedTracks({ limit: 200 })
+      .then((list) => {
+        if (!cancelled) setBrowseQueue(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (!cancelled) setBrowseQueue([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const isLiked = likes.some(like => like.user_id === user?.id);
 
   const handlePlay = async () => {
+    if (currentTrack && isSameTrack(currentTrack, track)) {
+      setPlaybackToggle((n) => n + 1);
+      return;
+    }
+    setPlaybackToggle(0);
     setCurrentTrack(track);
     try {
       await tracksAPI.playTrack(track.id);
@@ -64,6 +92,24 @@ export default function TrackPage() {
     } catch (error) {
       console.error('Failed to update play count:', error);
     }
+  };
+
+  const playlistAnchor = currentTrack || track;
+
+  const goNextTrack = () => {
+    const next = advanceInPlaylist(browseQueue, playlistAnchor, 1);
+    if (!next) return;
+    setPlaybackToggle(0);
+    setCurrentTrack(next);
+    tracksAPI.playTrack(next.id).catch(() => {});
+  };
+
+  const goPreviousTrack = () => {
+    const prev = advanceInPlaylist(browseQueue, playlistAnchor, -1);
+    if (!prev) return;
+    setPlaybackToggle(0);
+    setCurrentTrack(prev);
+    tracksAPI.playTrack(prev.id).catch(() => {});
   };
 
   const toggleLike = async () => {
@@ -82,6 +128,22 @@ export default function TrackPage() {
       console.error('Failed to toggle like:', error);
       toast.error('Ошибка при изменении лайка');
     }
+  };
+
+  const toggleFavoriteTrack = () => {
+    if (!user || !track) return;
+    if (isFavorite(track.id)) {
+      removeFavorite(track.id);
+    } else {
+      addFavorite(track.id);
+    }
+  };
+
+  const toggleFavoritePlaying = () => {
+    const t = currentTrack;
+    if (!user || !t) return;
+    if (isFavorite(t.id)) removeFavorite(t.id);
+    else addFavorite(t.id);
   };
 
   const addComment = async () => {
@@ -127,7 +189,7 @@ export default function TrackPage() {
         <div className="flex gap-6 flex-col md:flex-row">
           <div className="relative w-full md:w-48 h-48 rounded-xl overflow-hidden shrink-0">
             <img
-              src={track.cover_url || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300&h=300&fit=crop'}
+              src={getTrackCoverUrl(track) || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300&h=300&fit=crop'}
               alt={track.title}
               className="w-full h-full object-cover"
             />
@@ -137,7 +199,7 @@ export default function TrackPage() {
               whileHover={{ scale: 1.05 }}
             >
               <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center">
-                {currentTrack?.id === track.id ? (
+                {isSameTrack(currentTrack, track) && playerUiPlaying ? (
                   <Pause className="w-8 h-8 text-black" />
                 ) : (
                   <Play className="w-8 h-8 text-black ml-1" />
@@ -154,18 +216,14 @@ export default function TrackPage() {
             >
               {track.artist_name}
             </Link>
-
             {track.description && <p className={cn('mt-4', textSecondary)}>{track.description}</p>}
-
             <div className="flex items-center gap-6 mt-6 flex-wrap">
               <div className="flex items-center gap-2">
                 <Play className="w-5 h-5 text-purple-500" />
                 <span className={textClass}>{track.plays_count || 0} прослушиваний</span>
               </div>
               <div className="flex items-center gap-2">
-                <Heart
-                  className={cn('w-5 h-5', isLiked ? 'fill-red-500 text-red-500' : textSecondary)}
-                />
+                <Heart className={cn('w-5 h-5', isLiked ? 'fill-red-500 text-red-500' : textSecondary)} />
                 <span className={textClass}>{likes.length} лайков</span>
               </div>
               <div className="flex items-center gap-2">
@@ -173,11 +231,9 @@ export default function TrackPage() {
                 <span className={textClass}>{comments.length} комментариев</span>
               </div>
             </div>
-
             <div className="flex gap-3 mt-6 flex-wrap">
               <Button onClick={handlePlay} className="bg-purple-600 hover:bg-purple-700">
-                <Play className="w-4 h-4 mr-2" />
-                Слушать
+                <Play className="w-4 h-4 mr-2" /> Слушать
               </Button>
               {user && (
                 <Button
@@ -187,6 +243,16 @@ export default function TrackPage() {
                 >
                   <Heart className={cn('w-4 h-4 mr-2', isLiked && 'fill-red-500')} />
                   {isLiked ? 'В избранном' : 'Нравится'}
+                </Button>
+              )}
+              {user && (
+                <Button
+                  variant="outline"
+                  onClick={toggleFavoriteTrack}
+                  className={cn(isFavorite(track.id) && 'border-red-500 text-red-500')}
+                >
+                  <Heart className={cn('w-4 h-4 mr-2', isFavorite(track.id) && 'fill-red-500')} />
+                  {isFavorite(track.id) ? 'В избранном' : 'Добавить в избранное'}
                 </Button>
               )}
             </div>
@@ -200,10 +266,7 @@ export default function TrackPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
       >
-        <h2 className={cn('text-xl font-bold mb-6', textClass)}>
-          Комментарии ({comments.length})
-        </h2>
-
+        <h2 className={cn('text-xl font-bold mb-6', textClass)}>Комментарии ({comments.length})</h2>
         {user ? (
           <div className="flex gap-4 mb-6">
             <Avatar className="h-10 w-10">
@@ -219,15 +282,13 @@ export default function TrackPage() {
                 className={cn('mb-2', isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-gray-50 border-gray-200')}
               />
               <Button onClick={addComment} disabled={!newComment.trim()} size="sm">
-                <Send className="w-4 h-4 mr-2" />
-                Отправить
+                <Send className="w-4 h-4 mr-2" /> Отправить
               </Button>
             </div>
           </div>
         ) : (
           <p className={cn('mb-6', textSecondary)}>Войдите, чтобы оставить комментарий</p>
         )}
-
         <div className="space-y-4">
           {comments.map((comment, index) => (
             <motion.div
@@ -253,16 +314,18 @@ export default function TrackPage() {
               </div>
             </motion.div>
           ))}
-          {comments.length === 0 && (
-            <p className={cn('text-center py-8', textSecondary)}>Пока нет комментариев</p>
-          )}
+          {comments.length === 0 && <p className={cn('text-center py-8', textSecondary)}>Пока нет комментариев</p>}
         </div>
       </motion.div>
 
       <AudioPlayer
         track={currentTrack}
-        onNext={() => {}}
-        onPrevious={() => {}}
+        playbackToggle={playbackToggle}
+        onPlayingChange={setPlayerUiPlaying}
+        onNext={goNextTrack}
+        onPrevious={goPreviousTrack}
+        isFavorite={currentTrack ? isFavorite(currentTrack.id) : false}
+        onToggleFavorite={currentTrack ? toggleFavoritePlaying : undefined}
         isDark={isDark}
       />
     </div>

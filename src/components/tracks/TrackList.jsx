@@ -92,7 +92,8 @@ const TrackList = ({ tracks, onPlay, currentTrack, favorites, onToggleFavorite, 
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const isTrackFavorite = (trackId) => favorites?.some(f => f.track_id === trackId);
+  const isTrackFavorite = (trackId) =>
+    favorites?.some(f => Number(f.track_id) === Number(trackId));
 
   return (
     <div className="space-y-1">

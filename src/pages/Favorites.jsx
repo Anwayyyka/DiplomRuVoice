@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Heart } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -6,58 +6,66 @@ import TrackRow from '../components/tracks/TrackRow';
 import AudioPlayer from '../components/player/AudioPlayer';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useFavorites } from '../contexts/FavoritesContext';
 import { tracksAPI } from '@/api/tracks';
-import { favoritesAPI } from '@/api/favorites';
+import { advanceInPlaylist, isSameTrack } from '@/lib/playback';
 
 export default function Favorites() {
   const { isDark } = useTheme();
   const { user } = useAuth();
+  const { favorites, removeFavorite } = useFavorites();
   const [currentTrack, setCurrentTrack] = useState(null);
+  const [playbackToggle, setPlaybackToggle] = useState(0);
+  const [playerUiPlaying, setPlayerUiPlaying] = useState(false);
   const [favoriteTracks, setFavoriteTracks] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchFavorites = useCallback(async () => {
-    if (!user) {
-      setLoading(false);
-      setFavoriteTracks([]);
-      return;
-    }
-    try {
-      setLoading(true);
-      // Ожидаем, что API возвращает массив полных объектов треков
-      const tracks = await favoritesAPI.getUserFavorites(user.id);
-      setFavoriteTracks(tracks);
-    } catch (error) {
-      console.error('Failed to load favorites:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
-
   useEffect(() => {
-    fetchFavorites();
-  }, [fetchFavorites]);
+    const loadFavoriteTracks = async () => {
+      if (!user || favorites.length === 0) {
+        setFavoriteTracks([]);
+        setLoading(false);
+        return;
+      }
+      try {
+        const trackIds = new Set(favorites.map(f => Number(f.track_id)));
+        const allTracks = await tracksAPI.getApprovedTracks({ limit: 200 });
+        const filtered = allTracks.filter(track => trackIds.has(Number(track.id)));
+        setFavoriteTracks(filtered);
+      } catch (error) {
+        console.error('Failed to load favorite tracks:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadFavoriteTracks();
+  }, [user, favorites]);
 
   const playTrack = async (track) => {
+    if (currentTrack && isSameTrack(currentTrack, track)) {
+      setPlaybackToggle((n) => n + 1);
+      return;
+    }
+    setPlaybackToggle(0);
     setCurrentTrack(track);
     try {
       await tracksAPI.playTrack(track.id);
       setFavoriteTracks(prev =>
-        prev.map(t => t.id === track.id ? { ...t, plays_count: (t.plays_count || 0) + 1 } : t)
+        prev.map(t => (isSameTrack(t, track) ? { ...t, plays_count: (t.plays_count || 0) + 1 } : t))
       );
     } catch (error) {
       console.error('Failed to update play count:', error);
     }
   };
 
-  const removeFromFavorites = async (track) => {
-    if (!user) return;
-    try {
-      await favoritesAPI.removeFavorite(user.id, track.id);
-      setFavoriteTracks(prev => prev.filter(t => t.id !== track.id));
-    } catch (error) {
-      console.error('Failed to remove from favorites:', error);
-    }
+  const goNext = () => {
+    const next = advanceInPlaylist(favoriteTracks, currentTrack, 1);
+    if (next) playTrack(next);
+  };
+
+  const goPrevious = () => {
+    const prev = advanceInPlaylist(favoriteTracks, currentTrack, -1);
+    if (prev) playTrack(prev);
   };
 
   const textClass = isDark ? 'text-white' : 'text-gray-900';
@@ -112,8 +120,8 @@ export default function Favorites() {
               onPlay={playTrack}
               isDark={isDark}
               isFavorite={true}
-              onToggleFavorite={() => removeFromFavorites(track)}
-              isPlaying={currentTrack?.id === track.id}
+              onToggleFavorite={() => removeFavorite(track.id)}
+              isPlaying={isSameTrack(currentTrack, track) && playerUiPlaying}
               index={index}
             />
           ))}
@@ -122,10 +130,12 @@ export default function Favorites() {
 
       <AudioPlayer
         track={currentTrack}
-        onNext={() => {}}
-        onPrevious={() => {}}
+        playbackToggle={playbackToggle}
+        onPlayingChange={setPlayerUiPlaying}
+        onNext={goNext}
+        onPrevious={goPrevious}
         isFavorite={true}
-        onToggleFavorite={() => currentTrack && removeFromFavorites(currentTrack)}
+        onToggleFavorite={() => currentTrack && removeFavorite(currentTrack.id)}
         isDark={isDark}
       />
     </div>

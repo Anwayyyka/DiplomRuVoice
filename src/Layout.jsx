@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -16,7 +16,6 @@ export default function Layout({ children }) {
   const { user, logout } = useAuth();
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  // Избранное показываем только авторизованным (проверяем явно по user.id или token)
   const isLoggedIn = Boolean(user && (user.id != null || user.email));
   const navItems = [
     { name: 'Главная', path: '/', icon: Home },
@@ -33,7 +32,13 @@ export default function Layout({ children }) {
       navItems.push({ name: 'Модерация', path: '/moderation', icon: Shield });
     }
   }
+
   const isActive = (path) => location.pathname === path;
+
+  // useEffect для логирования (можно оставить или убрать)
+  useEffect(() => {
+    if (location.pathname !== '/moderation') return;
+  }, [location.pathname, user?.role]);
 
   const sidebarClasses = isDark
     ? 'bg-zinc-950/90 border-zinc-800 backdrop-blur-xl'

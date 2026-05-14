@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { useParams, useSearchParams } from 'react-router-dom'; // или useParams, если email в url
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Play, Heart, Music, Headphones, ExternalLink } from 'lucide-react';
@@ -9,94 +9,88 @@ import TrackRow from '../components/tracks/TrackRow';
 import AudioPlayer from '../components/player/AudioPlayer';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useFavorites } from '../contexts/FavoritesContext';
 import { usersAPI } from '@/api/users';
 import { tracksAPI } from '@/api/tracks';
-import { favoritesAPI } from '@/api/favorites';
+import { advanceInPlaylist, isSameTrack } from '@/lib/playback';
 
 export default function Artist() {
   const { isDark } = useTheme();
-  const { user: currentUser } = useAuth(); // текущий авторизованный пользователь
+  const { user: currentUser } = useAuth();
+  const { isFavorite, addFavorite, removeFavorite, reloadFavorites } = useFavorites();
   const [searchParams] = useSearchParams();
   const artistEmail = searchParams.get('email') || '';
 
   const [artist, setArtist] = useState(null);
   const [artistTracks, setArtistTracks] = useState([]);
-  const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentTrack, setCurrentTrack] = useState(null);
+  const [playbackToggle, setPlaybackToggle] = useState(0);
+  const [playerUiPlaying, setPlayerUiPlaying] = useState(false);
 
-  // Загрузка данных артиста и его треков
   const fetchArtistData = useCallback(async () => {
     if (!artistEmail) return;
     setLoading(true);
     try {
-      // 1. Получить информацию об артисте по email (предположим, есть эндпоинт)
       const artistData = await usersAPI.getUserByEmail(artistEmail);
       setArtist(artistData);
-
-      // 2. Получить одобренные треки этого артиста
-      const tracks = await tracksAPI.getArtistTracks(artistData.id); // предположим, есть такой метод
+      const tracks = await tracksAPI.getArtistTracks(artistData.id);
       setArtistTracks(tracks);
-
-      // 3. Если пользователь авторизован, получить его избранное (чтобы отметить лайки)
-      if (currentUser) {
-        const favs = await favoritesAPI.getUserFavorites(currentUser.id);
-        setFavorites(favs);
-      } else {
-        setFavorites([]);
-      }
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [artistEmail, currentUser]);
+  }, [artistEmail]);
 
   useEffect(() => {
+    reloadFavorites();
     fetchArtistData();
-  }, [fetchArtistData]);
+  }, [fetchArtistData, reloadFavorites]);
 
   const totalPlays = artistTracks.reduce((sum, t) => sum + (t.plays_count || 0), 0);
   const totalLikes = artistTracks.reduce((sum, t) => sum + (t.likes_count || 0), 0);
 
   const playTrack = async (track) => {
+    if (currentTrack && isSameTrack(currentTrack, track)) {
+      setPlaybackToggle((n) => n + 1);
+      return;
+    }
+    setPlaybackToggle(0);
     setCurrentTrack(track);
-    // Увеличиваем счётчик прослушиваний на сервере
     try {
       await tracksAPI.playTrack(track.id);
-      // Обновляем счётчик локально (или перезапросить данные)
       setArtistTracks(prev =>
-        prev.map(t => t.id === track.id ? { ...t, plays_count: (t.plays_count || 0) + 1 } : t)
+        prev.map(t => (isSameTrack(t, track) ? { ...t, plays_count: (t.plays_count || 0) + 1 } : t))
       );
     } catch (error) {
       console.error('Failed to update play count:', error);
     }
   };
 
-  const toggleFavorite = async (track) => {
+  const goNext = () => {
+    const next = advanceInPlaylist(artistTracks, currentTrack, 1);
+    if (next) playTrack(next);
+  };
+
+  const goPrevious = () => {
+    const prev = advanceInPlaylist(artistTracks, currentTrack, -1);
+    if (prev) playTrack(prev);
+  };
+
+  const toggleFavorite = (track) => {
     if (!currentUser) return;
-    const isFav = favorites.some(f => f.track_id === track.id);
-    try {
-      if (isFav) {
-        await favoritesAPI.removeFavorite(currentUser.id, track.id);
-        setFavorites(prev => prev.filter(f => f.track_id !== track.id));
-      } else {
-        const newFav = await favoritesAPI.addFavorite(currentUser.id, track.id);
-        setFavorites(prev => [...prev, newFav]);
-      }
-    } catch (error) {
-      console.error('Failed to toggle favorite:', error);
+    if (isFavorite(track.id)) {
+      removeFavorite(track.id);
+    } else {
+      addFavorite(track.id);
     }
   };
 
-  const isFavorite = (track) => favorites.some(f => f.track_id === track.id);
-
   const textClass = isDark ? 'text-white' : 'text-gray-900';
   const textSecondary = isDark ? 'text-gray-400' : 'text-gray-600';
-  const cardBg = isDark
-    ? 'bg-zinc-800/50 backdrop-blur-sm border-zinc-700'
-    : 'bg-white/80 backdrop-blur-sm border-gray-200';
+  const cardBg = isDark ? 'bg-zinc-800/50 backdrop-blur-sm border-zinc-700' : 'bg-white/80 backdrop-blur-sm border-gray-200';
 
   const socialLinks = [
     { key: 'telegram', icon: '📱', label: 'Telegram' },
@@ -124,7 +118,6 @@ export default function Artist() {
   return (
     <div className="relative min-h-screen">
       <div className="relative z-10">
-        {/* Banner */}
         <div
           className="h-64 bg-cover bg-center relative"
           style={{
@@ -136,7 +129,6 @@ export default function Artist() {
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
         </div>
 
-        {/* Artist Info */}
         <div className="max-w-4xl mx-auto px-4 sm:px-6 -mt-16 sm:-mt-24 relative z-10">
           <motion.div
             className={cn('rounded-2xl p-6 border', cardBg)}
@@ -157,7 +149,6 @@ export default function Artist() {
                 </h1>
                 {artist?.bio && <p className={cn('mb-4', textSecondary)}>{artist.bio}</p>}
 
-                {/* Stats */}
                 <div className="flex gap-8 mb-4">
                   <div className="text-center">
                     <p className={cn('text-2xl font-bold', textClass)}>{artistTracks.length}</p>
@@ -173,7 +164,6 @@ export default function Artist() {
                   </div>
                 </div>
 
-                {/* Social Links */}
                 <div className="flex gap-2 flex-wrap">
                   {socialLinks.map(link => {
                     const url = artist?.[link.key];
@@ -184,10 +174,7 @@ export default function Artist() {
                         href={url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className={cn(
-                          'flex items-center gap-2 px-3 py-1.5 rounded-full text-sm border',
-                          cardBg
-                        )}
+                        className={cn('flex items-center gap-2 px-3 py-1.5 rounded-full text-sm border', cardBg)}
                       >
                         <span>{link.icon}</span>
                         <span>{link.label}</span>
@@ -200,17 +187,8 @@ export default function Artist() {
             </div>
           </motion.div>
 
-          {/* Tracks */}
-          <motion.div
-            className="mt-8 pb-32"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-          >
-            <h2 className={cn('text-2xl font-bold mb-6', textClass)}>
-              Треки ({artistTracks.length})
-            </h2>
-
+          <motion.div className="mt-8 pb-32" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+            <h2 className={cn('text-2xl font-bold mb-6', textClass)}>Треки ({artistTracks.length})</h2>
             {artistTracks.length === 0 ? (
               <p className={cn('text-center py-12', textSecondary)}>Нет опубликованных треков</p>
             ) : (
@@ -221,9 +199,9 @@ export default function Artist() {
                     track={track}
                     onPlay={playTrack}
                     isDark={isDark}
-                    isFavorite={isFavorite(track)}
+                    isFavorite={isFavorite(track.id)}
                     onToggleFavorite={() => toggleFavorite(track)}
-                    isPlaying={currentTrack?.id === track.id}
+                    isPlaying={isSameTrack(currentTrack, track) && playerUiPlaying}
                     index={index}
                     showLink
                   />
@@ -236,8 +214,12 @@ export default function Artist() {
 
       <AudioPlayer
         track={currentTrack}
-        onNext={() => {}}
-        onPrevious={() => {}}
+        playbackToggle={playbackToggle}
+        onPlayingChange={setPlayerUiPlaying}
+        onNext={goNext}
+        onPrevious={goPrevious}
+        isFavorite={currentTrack ? isFavorite(currentTrack.id) : false}
+        onToggleFavorite={currentTrack && currentUser ? () => toggleFavorite(currentTrack) : undefined}
         isDark={isDark}
       />
     </div>

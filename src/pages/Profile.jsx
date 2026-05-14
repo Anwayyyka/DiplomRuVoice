@@ -1,16 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Play, Heart, Music, Headphones, Edit, Save, X, BarChart3, Settings, Star } from "lucide-react";
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Play, Heart, Music, Headphones, Edit, Save, X, BarChart3, Settings, Star } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import TrackRow from '../components/tracks/TrackRow';
 import AudioPlayer from '../components/player/AudioPlayer';
 import { useTheme } from '../contexts/ThemeContext';
@@ -18,41 +18,59 @@ import { useAuth } from '../contexts/AuthContext';
 import { tracksAPI } from '@/api/tracks';
 import { authAPI } from '@/api/auth';
 import { usersAPI } from '@/api/users';
+import { advanceInPlaylist, isSameTrack } from '@/lib/playback';
 import {
-  firstError,
-  validateStageName,
   validateMaxLength,
   validateOptionalHttpUrl,
 } from '@/lib/validation';
 import { normalizeArtistRequestPayload, isPendingArtistRequest } from '@/lib/artistRequestStatus';
 
+const getInitial = (value) =>
+  (value || '?')
+    .trim()
+    .charAt(0)
+    .toUpperCase();
+
 export default function Profile() {
   const { isDark } = useTheme();
   const { user: authUser } = useAuth();
+
   const [currentTrack, setCurrentTrack] = useState(null);
+  const [playbackToggle, setPlaybackToggle] = useState(0);
+  const [playerUiPlaying, setPlayerUiPlaying] = useState(false);
+  /** Откуда запущен плейлист: опубликованные или на модерации */
+  const [playerSource, setPlayerSource] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({});
+
   const [avatarFile, setAvatarFile] = useState(null);
   const [bannerFile, setBannerFile] = useState(null);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null);
   const [bannerPreviewUrl, setBannerPreviewUrl] = useState(null);
+
   const avatarInputRef = React.useRef(null);
   const bannerInputRef = React.useRef(null);
+
   const [artistRequest, setArtistRequest] = useState(null);
   const [user, setUser] = useState(null);
   const [myTracks, setMyTracks] = useState([]);
-  const [userLikes, setUserLikes] = useState([]);
-  const [allTracks, setAllTracks] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const fetchProfileData = useCallback(async () => {
-    if (!authUser) return;
+    if (!authUser) {
+      setUser(null);
+      setMyTracks([]);
+      setArtistRequest(null);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
+
       const userData = await authAPI.getProfile();
       setUser(userData);
 
-      // Загружаем статус заявки артиста
       const request = await usersAPI.getMyArtistRequest().catch(() => null);
       setArtistRequest(normalizeArtistRequestPayload(request) || request);
 
@@ -62,14 +80,12 @@ export default function Profile() {
       } else {
         setMyTracks([]);
       }
-
-      const approvedTracks = await tracksAPI.getApprovedTracks();
-      setAllTracks(Array.isArray(approvedTracks) ? approvedTracks : []);
     } catch (error) {
       console.error('Failed to load profile data:', error);
       toast.error('Не удалось загрузить данные профиля');
+      setUser(null);
       setMyTracks([]);
-      setAllTracks([]);
+      setArtistRequest(null);
     } finally {
       setLoading(false);
     }
@@ -79,19 +95,46 @@ export default function Profile() {
     fetchProfileData();
   }, [fetchProfileData]);
 
-  const likedTracks = (allTracks || []).filter(t => 
-    (userLikes || []).some(l => l.track_id === t.id)
-  );
-  const approvedTracks = (myTracks || []).filter(t => t.status === 'approved');
-  const pendingTracks = (myTracks || []).filter(t => t.status === 'pending');
+  useEffect(() => {
+    return () => {
+      if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
+      if (bannerPreviewUrl) URL.revokeObjectURL(bannerPreviewUrl);
+    };
+  }, [avatarPreviewUrl, bannerPreviewUrl]);
 
-  const totalPlays = approvedTracks.reduce((sum, t) => sum + (t.plays_count || 0), 0);
-  const totalLikes = approvedTracks.reduce((sum, t) => sum + (t.likes_count || 0), 0);
+  const approvedTracks = useMemo(
+    () => (myTracks || []).filter((t) => t.status === 'approved'),
+    [myTracks]
+  );
+
+  const pendingTracks = useMemo(
+    () => (myTracks || []).filter((t) => t.status === 'pending'),
+    [myTracks]
+  );
+
+  const totalPlays = useMemo(
+    () => approvedTracks.reduce((sum, t) => sum + (t.plays_count || 0), 0),
+    [approvedTracks]
+  );
+
+  const totalLikes = useMemo(
+    () => approvedTracks.reduce((sum, t) => sum + (t.likes_count || 0), 0),
+    [approvedTracks]
+  );
+
+  const playerPlaylist = useMemo(
+    () =>
+      playerSource === 'approved'
+        ? approvedTracks
+        : playerSource === 'pending'
+          ? pendingTracks
+          : [],
+    [playerSource, approvedTracks, pendingTracks]
+  );
 
   const startEditing = () => {
     setEditForm({
-      full_name: user?.full_name || '',
-      nickname: user?.nickname || '',
+      full_name: user?.full_name || user?.nickname || '',
       bio: user?.bio || '',
       avatar_url: user?.avatar_url || '',
       banner_url: user?.banner_url || '',
@@ -110,23 +153,28 @@ export default function Profile() {
   const onAvatarChange = (e) => {
     const file = e.target.files?.[0];
     if (!file || !file.type.startsWith('image/')) return;
+
     if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
     setAvatarFile(file);
     setAvatarPreviewUrl(URL.createObjectURL(file));
     e.target.value = '';
   };
+
   const onBannerChange = (e) => {
     const file = e.target.files?.[0];
     if (!file || !file.type.startsWith('image/')) return;
+
     if (bannerPreviewUrl) URL.revokeObjectURL(bannerPreviewUrl);
     setBannerFile(file);
     setBannerPreviewUrl(URL.createObjectURL(file));
     e.target.value = '';
   };
+
   const closeEditDialog = (open) => {
     if (!open) {
       if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
       if (bannerPreviewUrl) URL.revokeObjectURL(bannerPreviewUrl);
+
       setAvatarPreviewUrl(null);
       setBannerPreviewUrl(null);
       setAvatarFile(null);
@@ -137,51 +185,57 @@ export default function Profile() {
 
   const fileToDataUrl = (file) =>
     new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(r.result);
-      r.onerror = reject;
-      r.readAsDataURL(file);
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
     });
 
   const saveProfile = async () => {
-    const err = firstError(
-      (editForm.nickname || '').trim() ? validateStageName(editForm.nickname, 'Ник') : null,
+    const err = [
       validateMaxLength(editForm.bio || '', 5000, 'О себе'),
       validateOptionalHttpUrl(editForm.telegram, 'Telegram'),
       validateOptionalHttpUrl(editForm.vk, 'VK'),
       validateOptionalHttpUrl(editForm.youtube, 'YouTube'),
-      validateOptionalHttpUrl(editForm.website, 'Сайт')
-    );
+      validateOptionalHttpUrl(editForm.website, 'Сайт'),
+    ].find(Boolean);
+
     if (err) {
       toast.error(err);
       return;
     }
+
     try {
-      let updatedUser;
-      if (avatarFile || bannerFile) {
-        try {
-          const formData = new FormData();
-          Object.entries(editForm).forEach(([k, v]) => { if (v != null && v !== '') formData.append(k, String(v)); });
-          if (avatarFile) formData.append('avatar', avatarFile);
-          if (bannerFile) formData.append('banner', bannerFile);
-          updatedUser = await usersAPI.updateProfileWithFiles(authUser.id, formData);
-        } catch (_) {
-          const payload = { ...editForm };
-          if (avatarFile) payload.avatar_url = await fileToDataUrl(avatarFile);
-          if (bannerFile) payload.banner_url = await fileToDataUrl(bannerFile);
-          updatedUser = await usersAPI.updateProfile(authUser.id, payload);
-        }
-      } else {
-        updatedUser = await usersAPI.updateProfile(authUser.id, editForm);
+      const payload = {
+        full_name: (editForm.full_name || '').trim(),
+        bio: (editForm.bio || '').trim(),
+        avatar_url: editForm.avatar_url || '',
+        banner_url: editForm.banner_url || '',
+        telegram: editForm.telegram || '',
+        vk: editForm.vk || '',
+        youtube: editForm.youtube || '',
+        website: editForm.website || '',
+      };
+
+      if (avatarFile) {
+        payload.avatar_url = await fileToDataUrl(avatarFile);
       }
+      if (bannerFile) {
+        payload.banner_url = await fileToDataUrl(bannerFile);
+      }
+
+      const updatedUser = await usersAPI.updateProfile(authUser.id, payload);
       setUser(updatedUser);
+
       if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
       if (bannerPreviewUrl) URL.revokeObjectURL(bannerPreviewUrl);
+
       setAvatarPreviewUrl(null);
       setBannerPreviewUrl(null);
       setAvatarFile(null);
       setBannerFile(null);
       setIsEditing(false);
+
       toast.success('Профиль обновлён');
     } catch (error) {
       console.error('Update failed:', error);
@@ -189,9 +243,39 @@ export default function Profile() {
     }
   };
 
-  const playTrack = (track) => {
-    setCurrentTrack(track);
-  };
+  const playTrack = useCallback(
+    async (track) => {
+      if (currentTrack && isSameTrack(currentTrack, track)) {
+        setPlaybackToggle((n) => n + 1);
+        return;
+      }
+      setPlaybackToggle(0);
+      setCurrentTrack(track);
+      const fromApproved = approvedTracks.some(t => Number(t.id) === Number(track.id));
+      setPlayerSource(fromApproved ? 'approved' : 'pending');
+      try {
+        await tracksAPI.playTrack(track.id);
+        setMyTracks(prev =>
+          prev.map(t =>
+            Number(t.id) === Number(track.id) ? { ...t, plays_count: (t.plays_count || 0) + 1 } : t
+          )
+        );
+      } catch {
+        /* ignore */
+      }
+    },
+    [currentTrack, approvedTracks]
+  );
+
+  const goNext = useCallback(() => {
+    const next = advanceInPlaylist(playerPlaylist, currentTrack, 1);
+    if (next) playTrack(next);
+  }, [playerPlaylist, currentTrack, playTrack]);
+
+  const goPrevious = useCallback(() => {
+    const prev = advanceInPlaylist(playerPlaylist, currentTrack, -1);
+    if (prev) playTrack(prev);
+  }, [playerPlaylist, currentTrack, playTrack]);
 
   const textClass = isDark ? 'text-white' : 'text-gray-900';
   const textSecondary = isDark ? 'text-gray-400' : 'text-gray-600';
@@ -222,7 +306,6 @@ export default function Profile() {
   return (
     <div className="relative min-h-screen">
       <div className="relative z-10">
-        {/* Banner */}
         <div
           className="h-48 bg-cover bg-center relative"
           style={{
@@ -235,7 +318,6 @@ export default function Profile() {
         </div>
 
         <div className="max-w-4xl mx-auto px-4 sm:px-6 -mt-16 sm:-mt-20 relative z-10 pb-32">
-          {/* Profile Header */}
           <motion.div
             className={cn('rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 border', cardBg)}
             initial={{ opacity: 0, y: 20 }}
@@ -245,7 +327,7 @@ export default function Profile() {
               <Avatar className="w-20 h-20 sm:w-28 sm:h-28 ring-4 ring-purple-500/50 shrink-0">
                 {user?.avatar_url ? <AvatarImage src={user.avatar_url} /> : null}
                 <AvatarFallback className="bg-gradient-to-br from-purple-600 to-pink-600 text-white text-3xl">
-                  {(user.nickname || user.full_name)?.[0] || user.email?.[0]?.toUpperCase()}
+                  {getInitial(user.full_name || user.nickname || user.email)}
                 </AvatarFallback>
               </Avatar>
 
@@ -253,13 +335,14 @@ export default function Profile() {
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                   <div className="min-w-0">
                     <h1 className={cn('text-xl sm:text-2xl font-bold truncate', textClass)}>
-                      {user.nickname || user.full_name || 'Пользователь'}
+                      {user.full_name || user.nickname || 'Пользователь'}
                     </h1>
-                    {user.nickname && user.full_name && user.nickname !== user.full_name && (
-                      <p className={cn('text-sm', textSecondary)}>{user.full_name}</p>
+                    {user.full_name && user.nickname && user.full_name !== user.nickname && (
+                      <p className={cn('text-sm', textSecondary)}>{user.nickname}</p>
                     )}
                     <p className={textSecondary}>{user.email}</p>
                   </div>
+
                   <div className="flex flex-wrap gap-2">
                     {user.role === 'artist' && (
                       <Link to="/statistics">
@@ -284,7 +367,6 @@ export default function Profile() {
 
                 {user?.bio && <p className={cn('mt-3', textSecondary)}>{user.bio}</p>}
 
-                {/* Кнопка «Стать артистом» с учётом статуса заявки */}
                 {user.role !== 'artist' && user.role !== 'admin' && (
                   isPendingArtistRequest(artistRequest) ? (
                     <Button disabled className="mt-4 bg-gray-500">
@@ -303,7 +385,6 @@ export default function Profile() {
                   )
                 )}
 
-                {/* Stats Cards */}
                 {user.role === 'artist' && (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mt-6">
                     <motion.div
@@ -333,7 +414,6 @@ export default function Profile() {
                   </div>
                 )}
 
-                {/* Social Links */}
                 {(user?.telegram || user?.vk || user?.youtube || user?.website) && (
                   <div className="flex gap-2 mt-4 flex-wrap">
                     {user?.telegram && (
@@ -382,7 +462,6 @@ export default function Profile() {
             </div>
           </motion.div>
 
-          {/* Tabs — только для артистов */}
           {user.role === 'artist' && (
             <Tabs defaultValue="tracks" className="w-full">
               <TabsList className={cn('w-full justify-start mb-6 border flex flex-wrap gap-2', cardBg)}>
@@ -402,7 +481,7 @@ export default function Profile() {
                         track={track}
                         onPlay={playTrack}
                         isDark={isDark}
-                        isPlaying={currentTrack?.id === track.id}
+                        isPlaying={isSameTrack(currentTrack, track) && playerUiPlaying}
                         index={index}
                         showStats
                       />
@@ -422,7 +501,7 @@ export default function Profile() {
                         track={track}
                         onPlay={playTrack}
                         isDark={isDark}
-                        isPlaying={currentTrack?.id === track.id}
+                        isPlaying={isSameTrack(currentTrack, track) && playerUiPlaying}
                         index={index}
                       />
                     ))}
@@ -450,7 +529,10 @@ export default function Profile() {
                           transition={{ delay: index * 0.05 }}
                         >
                           <img
-                            src={track.cover_url || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=50&h=50&fit=crop'}
+                            src={
+                              track.cover_url ||
+                              'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=50&h=50&fit=crop'
+                            }
                             alt={track.title}
                             className="w-12 h-12 rounded-lg object-cover"
                           />
@@ -478,15 +560,15 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* Edit Profile Dialog */}
       <Dialog open={isEditing} onOpenChange={closeEditDialog}>
         <DialogContent className={cn('max-w-2xl border', cardBg)}>
           <DialogHeader>
             <DialogTitle className={textClass}>Редактировать профиль</DialogTitle>
             <p className={cn('text-sm', textSecondary)}>
-              Обновите аватар, шапку профиля, ник и ссылки на свои соцсети.
+              Обновите аватар, шапку профиля, имя и ссылки на свои соцсети.
             </p>
           </DialogHeader>
+
           <div className="space-y-6 py-4">
             <div className="grid gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)] items-start">
               <div className="space-y-4">
@@ -510,7 +592,11 @@ export default function Profile() {
                     )}
                   >
                     {(avatarPreviewUrl || editForm.avatar_url) ? (
-                      <img src={avatarPreviewUrl || editForm.avatar_url} alt="Аватар" className="w-full h-full object-cover" />
+                      <img
+                        src={avatarPreviewUrl || editForm.avatar_url}
+                        alt="Аватар"
+                        className="w-full h-full object-cover"
+                      />
                     ) : (
                       <span className={cn('text-xs', textSecondary)}>Нажмите, чтобы выбрать фото</span>
                     )}
@@ -537,9 +623,15 @@ export default function Profile() {
                     )}
                   >
                     {(bannerPreviewUrl || editForm.banner_url) ? (
-                      <img src={bannerPreviewUrl || editForm.banner_url} alt="Шапка" className="w-full h-full object-cover" />
+                      <img
+                        src={bannerPreviewUrl || editForm.banner_url}
+                        alt="Шапка"
+                        className="w-full h-full object-cover"
+                      />
                     ) : (
-                      <span className={cn('text-sm', textSecondary)}>Нажмите, чтобы выбрать изображение</span>
+                      <span className={cn('text-sm', textSecondary)}>
+                        Нажмите, чтобы выбрать изображение
+                      </span>
                     )}
                   </div>
                 </div>
@@ -547,11 +639,11 @@ export default function Profile() {
 
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label className={textSecondary}>Ник (отображаемое имя)</Label>
+                  <Label className={textSecondary}>Имя / псевдоним</Label>
                   <Input
-                    value={editForm.nickname ?? ''}
-                    onChange={(e) => setEditForm({ ...editForm, nickname: e.target.value })}
-                    placeholder="Ваш ник или псевдоним"
+                    value={editForm.full_name ?? ''}
+                    onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                    placeholder="Ваше имя или псевдоним"
                     className={inputBg}
                   />
                 </div>
@@ -559,7 +651,7 @@ export default function Profile() {
                 <div className="space-y-2">
                   <Label className={textSecondary}>О себе</Label>
                   <Textarea
-                    value={editForm.bio}
+                    value={editForm.bio || ''}
                     onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
                     placeholder="Расскажите о себе..."
                     className={inputBg}
@@ -574,7 +666,7 @@ export default function Profile() {
                 <div className="space-y-2">
                   <Label className={textSecondary}>Telegram</Label>
                   <Input
-                    value={editForm.telegram}
+                    value={editForm.telegram || ''}
                     onChange={(e) => setEditForm({ ...editForm, telegram: e.target.value })}
                     placeholder="https://t.me/..."
                     className={inputBg}
@@ -583,7 +675,7 @@ export default function Profile() {
                 <div className="space-y-2">
                   <Label className={textSecondary}>VK</Label>
                   <Input
-                    value={editForm.vk}
+                    value={editForm.vk || ''}
                     onChange={(e) => setEditForm({ ...editForm, vk: e.target.value })}
                     placeholder="https://vk.com/..."
                     className={inputBg}
@@ -592,7 +684,7 @@ export default function Profile() {
                 <div className="space-y-2">
                   <Label className={textSecondary}>YouTube</Label>
                   <Input
-                    value={editForm.youtube}
+                    value={editForm.youtube || ''}
                     onChange={(e) => setEditForm({ ...editForm, youtube: e.target.value })}
                     placeholder="https://youtube.com/..."
                     className={inputBg}
@@ -601,7 +693,7 @@ export default function Profile() {
                 <div className="space-y-2">
                   <Label className={textSecondary}>Сайт</Label>
                   <Input
-                    value={editForm.website}
+                    value={editForm.website || ''}
                     onChange={(e) => setEditForm({ ...editForm, website: e.target.value })}
                     placeholder="https://..."
                     className={inputBg}
@@ -610,6 +702,7 @@ export default function Profile() {
               </div>
             </div>
           </div>
+
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => closeEditDialog(false)}>
               <X className="w-4 h-4 mr-2" />
@@ -625,8 +718,10 @@ export default function Profile() {
 
       <AudioPlayer
         track={currentTrack}
-        onNext={() => {}}
-        onPrevious={() => {}}
+        playbackToggle={playbackToggle}
+        onPlayingChange={setPlayerUiPlaying}
+        onNext={goNext}
+        onPrevious={goPrevious}
         isDark={isDark}
       />
     </div>

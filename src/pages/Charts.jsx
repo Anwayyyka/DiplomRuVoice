@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import TrackRow from '../components/tracks/TrackRow';
@@ -6,73 +6,74 @@ import TrackCardSmall from '../components/tracks/TrackCardSmall';
 import AudioPlayer from '../components/player/AudioPlayer';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useFavorites } from '../contexts/FavoritesContext';
 import { tracksAPI } from '@/api/tracks';
-import { favoritesAPI } from '@/api/favorites';
+import { advanceInPlaylist, isSameTrack } from '@/lib/playback';
 
 export default function Charts() {
   const { isDark } = useTheme();
   const { user } = useAuth();
+  const { isFavorite, addFavorite, removeFavorite } = useFavorites();
   const [currentTrack, setCurrentTrack] = useState(null);
+  const [playbackToggle, setPlaybackToggle] = useState(0);
+  const [playerUiPlaying, setPlayerUiPlaying] = useState(false);
   const [tracks, setTracks] = useState([]);
-  const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const approvedTracks = await tracksAPI.getApprovedTracks();
-      setTracks(approvedTracks);
-
-      if (user) {
-        const favs = await favoritesAPI.getUserFavorites(user.id);
-        setFavorites(favs);
-      } else {
-        setFavorites([]);
-      }
-    } catch (error) {
-      console.error('Failed to load charts:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
-
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    const fetchTracks = async () => {
+      setLoading(true);
+      try {
+        const approvedTracks = await tracksAPI.getApprovedTracks();
+        setTracks(approvedTracks);
+      } catch (error) {
+        console.error('Failed to load charts:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTracks();
+  }, []);
 
   const topTracks = [...tracks].sort((a, b) => (b.plays_count || 0) - (a.plays_count || 0));
   const topCards = topTracks.slice(0, 5);
   const topList = topTracks.slice(0, 10);
 
   const playTrack = async (track) => {
+    if (currentTrack && isSameTrack(currentTrack, track)) {
+      setPlaybackToggle((n) => n + 1);
+      return;
+    }
+    setPlaybackToggle(0);
     setCurrentTrack(track);
     try {
       await tracksAPI.playTrack(track.id);
       setTracks(prev =>
-        prev.map(t => t.id === track.id ? { ...t, plays_count: (t.plays_count || 0) + 1 } : t)
+        prev.map(t => (isSameTrack(t, track) ? { ...t, plays_count: (t.plays_count || 0) + 1 } : t))
       );
     } catch (error) {
       console.error('Failed to update play count:', error);
     }
   };
 
-  const toggleFavorite = async (track) => {
+  const toggleFavorite = (track) => {
     if (!user) return;
-    const isFav = favorites.some(f => f.track_id === track.id);
-    try {
-      if (isFav) {
-        await favoritesAPI.removeFavorite(user.id, track.id);
-        setFavorites(prev => prev.filter(f => f.track_id !== track.id));
-      } else {
-        const newFav = await favoritesAPI.addFavorite(user.id, track.id);
-        setFavorites(prev => [...prev, newFav]);
-      }
-    } catch (error) {
-      console.error('Failed to toggle favorite:', error);
+    if (isFavorite(track.id)) {
+      removeFavorite(track.id);
+    } else {
+      addFavorite(track.id);
     }
   };
 
-  const isFavorite = (track) => favorites.some(f => f.track_id === track.id);
+  const goNext = () => {
+    const next = advanceInPlaylist(topTracks, currentTrack, 1);
+    if (next) playTrack(next);
+  };
+
+  const goPrevious = () => {
+    const prev = advanceInPlaylist(topTracks, currentTrack, -1);
+    if (prev) playTrack(prev);
+  };
 
   const textClass = isDark ? 'text-white' : 'text-gray-900';
   const textSecondary = isDark ? 'text-gray-400' : 'text-gray-600';
@@ -105,7 +106,7 @@ export default function Charts() {
                 track={track}
                 onPlay={playTrack}
                 isDark={isDark}
-                isPlaying={currentTrack?.id === track.id}
+                isPlaying={isSameTrack(currentTrack, track) && playerUiPlaying}
                 index={index}
               />
             ))}
@@ -128,9 +129,9 @@ export default function Charts() {
                 track={track}
                 onPlay={playTrack}
                 isDark={isDark}
-                isFavorite={isFavorite(track)}
+                isFavorite={isFavorite(track.id)}
                 onToggleFavorite={() => toggleFavorite(track)}
-                isPlaying={currentTrack?.id === track.id}
+                isPlaying={isSameTrack(currentTrack, track) && playerUiPlaying}
                 index={index}
               />
             ))}
@@ -140,9 +141,11 @@ export default function Charts() {
 
       <AudioPlayer
         track={currentTrack}
-        onNext={() => {}}
-        onPrevious={() => {}}
-        isFavorite={currentTrack ? isFavorite(currentTrack) : false}
+        playbackToggle={playbackToggle}
+        onPlayingChange={setPlayerUiPlaying}
+        onNext={goNext}
+        onPrevious={goPrevious}
+        isFavorite={currentTrack ? isFavorite(currentTrack.id) : false}
         onToggleFavorite={() => currentTrack && toggleFavorite(currentTrack)}
         isDark={isDark}
       />
